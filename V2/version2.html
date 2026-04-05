@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Task Vasilich V2</title>
+  <link rel="stylesheet" href="./style-v2.css" />
+</head>
+<body>
+  <div class="sidebar-overlay" id="sidebar-overlay" onclick="closeSidebar()"></div>
+
+  <div id="app">
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-brand">
+        <div class="sidebar-brand-top">
+          <div>
+            <div class="sidebar-kicker">Vasilich</div>
+            <div class="sidebar-title">ДЕЙСТВИЯ</div>
+          </div>
+          <button class="sidebar-collapse-btn" type="button" onclick="toggleSidebarCollapsed()" title="Свернуть меню">⇤</button>
+        </div>
+      </div>
+
+      <div class="sidebar-section">
+        <div class="sidebar-label">Навигация</div>
+        <button class="sidebar-link active" type="button" title="График" data-view="graph" onclick="switchView('graph')"><span class="sidebar-link-icon">▤</span><span class="sidebar-link-text">График</span></button>
+        <button class="sidebar-link" type="button" title="Задачи" data-view="tasks" onclick="switchView('tasks')"><span class="sidebar-link-icon">☰</span><span class="sidebar-link-text">Задачи</span></button>
+        <button class="sidebar-link" type="button" title="Достижения" data-view="wins" onclick="switchView('wins')"><span class="sidebar-link-icon">✦</span><span class="sidebar-link-text">Достижения</span></button>
+        <button class="sidebar-link" type="button" title="История и аналитика" data-view="history" onclick="switchView('history')"><span class="sidebar-link-icon">◔</span><span class="sidebar-link-text">История и аналитика</span></button>
+      </div>
+
+      <div class="sidebar-section">
+        <div class="sidebar-label">Управление</div>
+        <button class="sidebar-action" type="button" onclick="toggleSidebarSection('projects')" title="Проекты"><span class="sidebar-link-icon">◩</span><span class="sidebar-link-text">Проекты</span></button>
+        <div class="sidebar-projects sidebar-hide-on-collapse" id="sidebar-projects"></div>
+        <button class="sidebar-action" type="button" onclick="toggleSidebarSection('groups')" title="Группы"><span class="sidebar-link-icon">▥</span><span class="sidebar-link-text">Группы</span></button>
+        <div class="sidebar-groups sidebar-hide-on-collapse" id="sidebar-groups"></div>
+        <button class="sidebar-action" type="button" onclick="openProjectTemplateManage()" title="Шаблоны"><span class="sidebar-link-icon">⌘</span><span class="sidebar-link-text">Шаблоны</span></button>
+        <button class="sidebar-action" type="button" onclick="openRecurringManage()" title="Постоянные задачи"><span class="sidebar-link-icon">∞</span><span class="sidebar-link-text">Постоянные задачи</span></button>
+      </div>
+
+      <div class="sidebar-section">
+        <div class="sidebar-label">Система</div>
+        <button class="sidebar-action" type="button" title="Профиль" data-view="profile" onclick="switchView('profile')"><span class="sidebar-link-icon">◉</span><span class="sidebar-link-text">Профиль</span></button>
+        <button class="sidebar-action" type="button" title="Настройки" data-view="settings" onclick="switchView('settings')"><span class="sidebar-link-icon">⚙</span><span class="sidebar-link-text">Настройки</span></button>
+      </div>
+
+      <div class="sidebar-summary" id="sidebar-summary"></div>
+    </aside>
+
+    <main class="main-content">
+      <div class="top-bar">
+        <button class="burger-btn" type="button" onclick="toggleSidebar()">☰</button>
+        <div class="week-nav" id="week-nav">
+          <button type="button" onclick="changeWeek(-1)" aria-label="Предыдущая неделя"><span class="week-nav-icon">←</span></button>
+          <span class="week-label" id="week-label"></span>
+          <button type="button" onclick="changeWeek(1)" aria-label="Следующая неделя"><span class="week-nav-icon">→</span></button>
+        </div>
+        <div class="page-title" id="page-title" style="display:none"></div>
+        <div class="spacer"></div>
+        <button class="manage-btn" id="top-create-task-btn" type="button" onclick="openCreateTaskModal()">+ задача</button>
+        <button class="manage-btn" id="top-add-project-btn" type="button" onclick="openDayProjectModal()">+ проект</button>
+        <button class="manage-btn" id="top-carry-btn" type="button" onclick="carryOverUnfinished()">перенос задач</button>
+      </div>
+
+      <div class="stats-bar" id="stats-bar"></div>
+
+      <div class="board-wrap" id="graph-view">
+        <table id="board-table"></table>
+      </div>
+
+      <section class="tasks-view" id="tasks-view" style="display:none"></section>
+      <section class="wins-view" id="wins-view" style="display:none"></section>
+      <section class="empty-view" id="history-view" style="display:none"></section>
+      <section class="profile-view" id="profile-view" style="display:none"></section>
+      <section class="settings-view" id="settings-view" style="display:none"></section>
+
+      <div class="ai-section" id="ai-section" style="display:none">
+        <h3>ИИ-анализ</h3>
+        <div id="ai-text" class="ai-text"></div>
+      </div>
+    </main>
+  </div>
+
+  <div class="modal-bg" id="task-modal" onclick="handleModalBackdrop(event, 'task')">
+    <div class="modal">
+      <div class="modal-header">
+        <div class="modal-title" id="task-modal-title">Задача</div>
+        <button class="modal-close" type="button" onclick="closeTaskModal()">×</button>
+      </div>
+      <input id="task-input" placeholder="Текст задачи..." />
+      <textarea id="task-note" placeholder="Заметка к задаче..."></textarea>
+      <label class="field-group">
+        <span class="form-label">День</span>
+        <select id="task-day-select"></select>
+      </label>
+      <div class="modal-actions modal-actions-balanced">
+        <button id="task-delete-btn" type="button" onclick="deleteTask()" style="display:none">Удалить</button>
+        <button id="task-done-btn" type="button" onclick="toggleTaskDoneFromModal()" style="display:none">Выполнено</button>
+        <button id="task-send-btn" type="button" onclick="sendTaskToGraph()" style="display:none">В график</button>
+        <button class="primary" id="task-save-btn" type="button" onclick="saveTask()">Сохранить</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-bg" id="create-task-modal" onclick="handleModalBackdrop(event, 'create-task')">
+    <div class="modal">
+      <div class="modal-header">
+        <div class="modal-title" id="create-task-title">Добавить задачу</div>
+        <button class="modal-close" type="button" onclick="closeCreateTaskModal()">×</button>
+      </div>
+      <label class="field-group">
+        <span class="form-label">Группа</span>
+        <select id="create-task-group-select"></select>
+      </label>
+      <label class="field-group" id="create-task-day-group">
+        <span class="form-label">День</span>
+        <select id="create-task-day-select"></select>
+      </label>
+      <label class="field-group">
+        <span class="form-label">Проект</span>
+        <select id="create-task-project-select"></select>
+      </label>
+      <input id="create-task-input" placeholder="Текст задачи..." />
+      <div class="modal-actions modal-actions-right">
+        <button class="primary" type="button" onclick="saveCreatedTask()">Добавить</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-bg" id="day-project-modal" onclick="handleModalBackdrop(event, 'day-project')">
+    <div class="modal">
+      <div class="modal-header">
+        <div class="modal-title" id="day-project-title">Добавить проект в день</div>
+        <button class="modal-close" type="button" onclick="closeDayProjectModal()">×</button>
+      </div>
+      <div class="modal-copy" id="day-project-copy"></div>
+      <label class="field-group">
+        <span class="form-label">Группа</span>
+        <select id="day-project-group-select"></select>
+      </label>
+      <label class="field-group" id="day-project-year-group" style="display:none">
+        <span class="form-label">Год</span>
+        <select id="day-project-year-select"></select>
+      </label>
+      <label class="field-group">
+        <span class="form-label">День</span>
+        <select id="day-project-day-select"></select>
+      </label>
+      <label class="field-group">
+        <span class="form-label">Проект</span>
+        <select id="day-project-select"></select>
+      </label>
+      <div class="modal-note" id="day-project-empty" style="display:none">Для этого дня уже добавлены все проекты группы.</div>
+      <div class="modal-actions modal-actions-right">
+        <button class="primary" id="day-project-save-btn" type="button" onclick="saveDayProject()">Добавить</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-bg" id="project-template-modal" onclick="handleModalBackdrop(event, 'project-template')">
+    <div class="modal modal-xl">
+      <div class="modal-header">
+        <div class="modal-title">Шаблон проектов</div>
+        <button class="modal-close" type="button" onclick="closeProjectTemplateManage()">×</button>
+      </div>
+      <div class="modal-copy">Здесь настраивается, какие проекты должны автоматически появляться в новой неделе по дням. Это не затрагивает уже вручную изменённые недели.</div>
+      <div class="project-template-board" id="project-template-board"></div>
+      <div class="modal-actions modal-actions-right">
+        <button class="primary" type="button" onclick="closeProjectTemplateManage()">Готово</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-bg" id="manage-modal" onclick="handleModalBackdrop(event, 'manage')">
+    <div class="modal">
+      <div class="modal-header">
+        <div class="modal-title" id="manage-modal-title">Добавить проект</div>
+        <button class="modal-close" type="button" onclick="closeManage()">×</button>
+      </div>
+      <input id="proj-name" placeholder="Название проекта" />
+      <label class="field-group">
+        <span class="form-label">Группа</span>
+        <select id="proj-group-select"></select>
+      </label>
+      <div class="field-group">
+        <span class="form-label">Цвет</span>
+        <div class="color-picker" id="color-picker"></div>
+      </div>
+      <div class="modal-actions modal-actions-right">
+        <button id="manage-delete-btn" type="button" onclick="deleteProject()" style="display:none">Удалить</button>
+        <button class="primary" id="manage-save-btn" type="button" onclick="saveProject()">Сохранить</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-bg" id="group-modal" onclick="handleModalBackdrop(event, 'group')">
+    <div class="modal">
+      <div class="modal-header">
+        <div class="modal-title" id="group-modal-title">Добавить группу</div>
+        <button class="modal-close" type="button" onclick="closeGroupManage()">×</button>
+      </div>
+      <input id="group-name" placeholder="Название группы" />
+      <div class="field-group">
+        <span class="form-label">Цвет</span>
+        <div class="color-picker" id="group-color-picker"></div>
+      </div>
+      <div class="modal-actions modal-actions-right">
+        <button id="group-delete-btn" type="button" onclick="deleteGroup()" style="display:none">Удалить</button>
+        <button class="primary" id="group-save-btn" type="button" onclick="saveGroup()">Сохранить</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-bg" id="recurring-modal" onclick="handleModalBackdrop(event, 'recurring')">
+    <div class="modal modal-xl">
+      <div class="modal-header">
+        <div class="modal-title">Постоянные задачи</div>
+        <button class="modal-close" type="button" onclick="closeRecurringManage()">×</button>
+      </div>
+      <div class="recurring-modal-layout">
+        <div class="recurring-panel">
+          <div class="recurring-toolbar">
+            <label class="field-group">
+              <span class="form-label">Группа</span>
+              <select id="recurring-filter-group"></select>
+            </label>
+            <label class="field-group">
+              <span class="form-label">Проект</span>
+              <select id="recurring-filter-project"></select>
+            </label>
+          </div>
+          <div class="recurring-list" id="recurring-list"></div>
+        </div>
+        <div class="recurring-form">
+          <input id="recurring-text" placeholder="Название постоянной задачи" />
+          <label class="field-group">
+            <span class="form-label">Проект</span>
+            <select id="recurring-project-select"></select>
+          </label>
+          <label class="field-group">
+            <span class="form-label">День</span>
+            <select id="recurring-day-select"></select>
+          </label>
+          <div class="modal-actions modal-actions-right">
+            <button id="recurring-delete-btn" type="button" onclick="deleteRecurring()" style="display:none">Удалить</button>
+            <button id="recurring-new-btn" type="button" onclick="startRecurringEdit()">Новая</button>
+            <button class="primary" id="recurring-save-btn" type="button" onclick="saveRecurring()">Сохранить</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-bg" id="achievement-modal" onclick="handleModalBackdrop(event, 'achievement')">
+    <div class="modal">
+      <div class="modal-header">
+        <div class="modal-title" id="achievement-modal-title">Добавить достижение</div>
+        <button class="modal-close" type="button" onclick="closeAchievementModal()">×</button>
+      </div>
+      <label class="field-group">
+        <span class="form-label">Год</span>
+        <select id="achievement-year-select"></select>
+      </label>
+      <label class="field-group">
+        <span class="form-label">Группа</span>
+        <select id="achievement-group-select"></select>
+      </label>
+      <label class="field-group">
+        <span class="form-label">Проект</span>
+        <select id="achievement-project-select"></select>
+      </label>
+      <label class="field-group">
+        <span class="form-label">Дата</span>
+        <input id="achievement-date-input" type="date" />
+      </label>
+      <label class="field-group">
+        <span class="form-label">Достижение</span>
+        <textarea id="achievement-text-input" placeholder="Что получилось, какой результат зафиксирован..."></textarea>
+      </label>
+      <div class="modal-actions modal-actions-right">
+        <button id="achievement-delete-btn" type="button" onclick="deleteAchievement()" style="display:none">Удалить</button>
+        <button class="primary" id="achievement-save-btn" type="button" onclick="saveAchievement()">Сохранить</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="./app-v2.js"></script>
+</body>
+</html>
