@@ -52,7 +52,7 @@
         </label>
         <label class="field-group">
           <span class="form-label">Название пространства</span>
-          <input id="register-workspace-name" type="text" placeholder="Действия" />
+          <input id="register-workspace-name" type="text" value="ДЕЙСТВИЯ" placeholder="ДЕЙСТВИЯ" />
         </label>
         <button class="primary auth-submit" id="auth-register-submit" type="submit">Создать аккаунт</button>
       </form>
@@ -68,12 +68,11 @@
             <div class="sidebar-title" id="sidebar-workspace-name">ДЕЙСТВИЯ</div>
           </div>
           <button class="sidebar-collapse-btn" type="button" onclick="toggleSidebarCollapsed()" title="Свернуть меню">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+            <span class="sidebar-collapse-glyph" aria-hidden="true">‹</span>
           </button>
         </div>
         <div class="sidebar-account sidebar-hide-on-collapse">
           <div class="sidebar-account-name" id="sidebar-account-name">Гость</div>
-          <button class="sidebar-account-logout" type="button" onclick="logoutUser()">Выйти</button>
         </div>
       </div>
 

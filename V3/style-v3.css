@@ -82,13 +82,13 @@ body {
 }
 
 .auth-panel {
-  width: min(100%, 420px);
+  width: min(100%, 560px);
   background: var(--surface);
   border: 1px solid var(--border);
-  padding: 28px;
+  padding: 34px;
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 20px;
   box-shadow: 0 20px 50px rgba(0, 0, 0, 0.06);
 }
 
@@ -134,6 +134,18 @@ body {
   display: flex;
   flex-direction: column;
   gap: 14px;
+  width: 100%;
+}
+
+.auth-form .field-group {
+  width: 100%;
+}
+
+.auth-form input {
+  min-height: 52px;
+  padding: 14px 16px;
+  font-size: 16px;
+  line-height: 1.2;
 }
 
 .auth-submit {
@@ -213,7 +225,7 @@ body {
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--sidebar-text-muted);
-  margin-bottom: 3px;
+  margin-bottom: 10px;
 }
 
 .sidebar-title {
@@ -227,7 +239,7 @@ body {
   padding: 0 4px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 8px;
 }
 
@@ -239,28 +251,12 @@ body {
   text-overflow: ellipsis;
 }
 
-.sidebar-account-logout {
-  border: 1px solid var(--sidebar-border);
-  background: transparent;
-  color: var(--sidebar-text-muted);
-  min-height: 28px;
-  padding: 0 10px;
-  cursor: pointer;
-  transition: color var(--t-fast), border-color var(--t-fast), background var(--t-fast);
-}
-
-.sidebar-account-logout:hover {
-  color: var(--sidebar-text);
-  border-color: var(--sidebar-border);
-  background: var(--sidebar-hover);
-}
-
 .sidebar-collapse-btn {
   width: 26px;
   height: 26px;
   border: 1px solid var(--sidebar-border);
   background: transparent;
-  color: var(--sidebar-text-muted);
+  color: var(--sidebar-text);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -275,12 +271,16 @@ body {
   background: var(--sidebar-hover);
 }
 
-.sidebar-collapse-btn svg {
+.sidebar-collapse-glyph {
+  display: block;
+  color: var(--sidebar-text);
+  font: 400 24px/1 var(--font-sans);
+  transform: translateY(-1px);
   transition: transform var(--t-mid);
 }
 
-.sidebar-collapse-btn.collapsed svg {
-  transform: rotate(180deg);
+.sidebar-collapse-btn.collapsed .sidebar-collapse-glyph {
+  transform: rotate(180deg) translateY(1px);
 }
 
 .sidebar-section {
@@ -435,7 +435,7 @@ body {
   justify-content: center;
   padding: 9px 0;
 }
-#app.sidebar-collapsed .sidebar-collapse-btn svg { transform: rotate(180deg); }
+#app.sidebar-collapsed .sidebar-collapse-glyph { transform: rotate(180deg) translateY(1px); }
 
 /* summary card */
 .summary-card {

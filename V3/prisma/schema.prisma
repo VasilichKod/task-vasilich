@@ -102,8 +102,11 @@ model Group {
   workspaceId String     @map("workspace_id")
   name        String
   color       String
+  isSystem    Boolean    @default(false) @map("is_system")
+  systemKey   String?    @map("system_key")
   sortOrder   Int        @default(0) @map("sort_order")
   archivedAt  DateTime?  @map("archived_at")
+  deleteAfterAt DateTime? @map("delete_after_at")
   createdAt   DateTime   @default(now()) @map("created_at")
   updatedAt   DateTime   @updatedAt @map("updated_at")
 
@@ -115,6 +118,7 @@ model Group {
   achievementPageProjects AchievementPageProject[]
 
   @@index([workspaceId, sortOrder])
+  @@unique([workspaceId, systemKey])
   @@map("groups")
 }
 
@@ -126,6 +130,7 @@ model Project {
   color       String
   sortOrder   Int        @default(0) @map("sort_order")
   archivedAt  DateTime?  @map("archived_at")
+  deleteAfterAt DateTime? @map("delete_after_at")
   createdAt   DateTime   @default(now()) @map("created_at")
   updatedAt   DateTime   @updatedAt @map("updated_at")
 
@@ -235,7 +240,7 @@ model ProjectTemplate {
   updatedAt   DateTime   @updatedAt @map("updated_at")
 
   workspace   Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  group       Group      @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  group       Group      @relation(fields: [groupId], references: [id], onDelete: Restrict)
   project     Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@unique([workspaceId, groupId, dayIndex, projectId])
@@ -254,7 +259,7 @@ model DayProject {
   createdAt     DateTime   @default(now()) @map("created_at")
 
   workspace     Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  group         Group      @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  group         Group      @relation(fields: [groupId], references: [id], onDelete: Restrict)
   project       Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@unique([workspaceId, weekStartDate, groupId, dayIndex, projectId])
@@ -271,7 +276,7 @@ model TaskPageProject {
   createdAt   DateTime   @default(now()) @map("created_at")
 
   workspace   Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  group       Group      @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  group       Group      @relation(fields: [groupId], references: [id], onDelete: Restrict)
   project     Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@unique([workspaceId, groupId, projectId])
@@ -282,7 +287,9 @@ model TaskPageProject {
 model Achievement {
   id              String     @id @default(cuid())
   workspaceId     String     @map("workspace_id")
-  projectId       String     @map("project_id")
+  projectId       String?    @map("project_id")
+  projectNameSnapshot String @map("project_name_snapshot")
+  groupNameSnapshot   String? @map("group_name_snapshot")
   achievementYear Int        @map("achievement_year")
   achievementDate DateTime?  @db.Date @map("achievement_date")
   title           String
@@ -291,7 +298,7 @@ model Achievement {
   updatedAt       DateTime   @updatedAt @map("updated_at")
 
   workspace       Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  project         Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  project         Project?   @relation(fields: [projectId], references: [id], onDelete: SetNull)
 
   @@index([workspaceId, achievementYear, projectId, achievementDate])
   @@map("achievements")
@@ -300,15 +307,17 @@ model Achievement {
 model AchievementPageProject {
   id              String     @id @default(cuid())
   workspaceId     String     @map("workspace_id")
-  groupId         String     @map("group_id")
-  projectId       String     @map("project_id")
+  groupId         String?    @map("group_id")
+  projectId       String?    @map("project_id")
+  groupNameSnapshot String   @map("group_name_snapshot")
+  projectNameSnapshot String @map("project_name_snapshot")
   achievementYear Int        @map("achievement_year")
   sortOrder       Int        @default(0) @map("sort_order")
   createdAt       DateTime   @default(now()) @map("created_at")
 
   workspace       Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  group           Group      @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  project         Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  group           Group?     @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  project         Project?   @relation(fields: [projectId], references: [id], onDelete: SetNull)
 
   @@unique([workspaceId, achievementYear, groupId, projectId])
   @@index([workspaceId, achievementYear, groupId, sortOrder])

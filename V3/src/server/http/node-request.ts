@@ -20,8 +20,8 @@ export async function toWebRequest(req: IncomingMessage) {
     method: req.method,
     headers: req.headers as HeadersInit,
     body,
-    duplex: body ? 'half' : undefined,
-  });
+    ...(body ? ({ duplex: 'half' } as RequestInit) : {}),
+  } as RequestInit);
 }
 
 export async function sendWebResponse(res: ServerResponse, webResponse: Response) {

@@ -89,7 +89,7 @@ function buildBacklogMap(
 function buildAchievementsMap(
   items: Array<{
     id: string;
-    projectId: string;
+    projectId: string | null;
     achievementYear: number;
     achievementDate: Date | null;
     title: string;
@@ -98,6 +98,7 @@ function buildAchievementsMap(
   const result: Record<string, Record<string, Array<{ id: string; text: string; date: string }>>> = {};
 
   for (const item of items) {
+    if (!item.projectId) continue;
     const year = String(item.achievementYear);
     result[year] ||= {};
     result[year][item.projectId] ||= [];
@@ -130,13 +131,14 @@ function buildTaskProjectsMap(
 function buildAchievementProjectsMap(
   rows: Array<{
     achievementYear: number;
-    groupId: string;
-    projectId: string;
+    groupId: string | null;
+    projectId: string | null;
   }>,
 ) {
   const result: Record<string, Record<string, string[]>> = {};
 
   for (const row of rows) {
+    if (!row.groupId || !row.projectId) continue;
     const year = String(row.achievementYear);
     result[year] ||= {};
     result[year][row.groupId] ||= [];

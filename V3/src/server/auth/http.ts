@@ -3,6 +3,7 @@ import { ZodError } from 'zod';
 import { getCurrentUserFromRequest } from './current-user.js';
 import { loginUser } from './login.js';
 import { registerUser } from './register.js';
+import type { LoginInput, RegisterInput } from './schema.js';
 import { clearSessionCookie, createSessionCookie } from './session.js';
 
 function json(data: unknown, status = 200, headers?: HeadersInit) {
@@ -21,7 +22,7 @@ async function readJsonBody<T>(request: Request) {
 
 export async function handleRegisterRequest(request: Request) {
   try {
-    const body = await readJsonBody(request);
+    const body = await readJsonBody<RegisterInput>(request);
     const result = await registerUser(body);
 
     return json(
@@ -82,7 +83,7 @@ export async function handleRegisterRequest(request: Request) {
 
 export async function handleLoginRequest(request: Request) {
   try {
-    const body = await readJsonBody(request);
+    const body = await readJsonBody<LoginInput>(request);
     const result = await loginUser(body);
 
     return json(

@@ -138,10 +138,10 @@ function applyCurrentUser(user) {
     city: user.profile?.city || state.profile.city,
     about: user.profile?.about || state.profile.about,
   });
-  state.settings.workspaceName = user.workspace?.name || state.settings.workspaceName;
   const accountName = user.profile?.name || user.email || 'Пользователь';
+  const workspaceName = state.settings.workspaceName || user.workspace?.name || DEFAULT_SETTINGS.workspaceName;
   document.getElementById('sidebar-account-name').textContent = accountName;
-  document.getElementById('sidebar-workspace-name').textContent = user.workspace?.name || state.settings.workspaceName;
+  document.getElementById('sidebar-workspace-name').textContent = workspaceName;
 }
 
 async function fetchCurrentUserSession() {
@@ -225,7 +225,7 @@ async function submitRegister(event) {
         name: document.getElementById('register-name').value.trim(),
         email: document.getElementById('register-email').value.trim(),
         password: document.getElementById('register-password').value,
-        workspaceName: document.getElementById('register-workspace-name').value.trim() || 'Действия',
+        workspaceName: document.getElementById('register-workspace-name').value.trim() || 'ДЕЙСТВИЯ',
       }),
     });
 
@@ -1156,6 +1156,9 @@ function renderProfileView() {
         <div class="settings-info-row">
           <span>Аккаунт</span>
           <b>${escapeHtml(currentUser?.email || state.profile.email || 'Локальный профиль')}</b>
+        </div>
+        <div class="modal-actions modal-actions-right">
+          <button type="button" onclick="logoutUser()">Выйти из аккаунта</button>
         </div>
       </section>
     </div>

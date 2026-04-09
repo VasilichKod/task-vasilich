@@ -156,6 +156,60 @@
 - `achievement_page_projects`
 - `user_settings`
 
+### Архивирование и удаление
+
+- Для `groups` и `projects` продовая логика строится не на мгновенном hard delete, а на архивировании.
+- В схеме у групп и проектов есть:
+  - `archived_at`
+  - `delete_after_at`
+- Это закладывает модель:
+  - пользователь нажимает `Удалить`
+  - сущность исчезает из активной работы
+  - потом 30 дней доступна для восстановления
+  - только после этого возможен окончательный hard delete
+
+#### Группы
+
+- У групп есть:
+  - `is_system`
+  - `system_key`
+- Это нужно для системной группы `Без группы`.
+- При удалении обычной группы проекты не должны удаляться.
+- Проекты должны быть переведены в системную группу `Без группы`.
+- Поэтому активные связи на группу в продовой схеме уже переведены на более осторожную модель:
+  - `Project.group` — `onDelete: Restrict`
+  - `ProjectTemplate.group` — `onDelete: Restrict`
+  - `DayProject.group` — `onDelete: Restrict`
+  - `TaskPageProject.group` — `onDelete: Restrict`
+
+#### Проекты
+
+- У проекта удаление также должно идти через архив.
+- Активные сущности проекта:
+  - `weekly_tasks`
+  - `backlog_tasks`
+  - `recurring_tasks`
+  - `project_templates`
+  - `day_projects`
+  - `task_page_projects`
+  должны исчезать из активной работы вместе с архивированием проекта.
+- Достижения проекта удаляться не должны.
+
+#### Достижения
+
+- `achievements` не должны зависеть от существования проекта как живой активной сущности.
+- В схеме для этого:
+  - `Achievement.projectId` уже nullable
+  - удаление проекта для достижения идет через `onDelete: SetNull`
+  - в достижении хранится:
+    - `project_name_snapshot`
+    - `group_name_snapshot`
+- То же самое заложено для `achievement_page_projects`:
+  - `groupId` и `projectId` nullable
+  - `onDelete: SetNull`
+  - есть snapshot-поля имени группы и проекта
+- Это позволяет сохранять исторические достижения даже после удаления или архивирования проекта / группы.
+
 ### Bootstrap API
 
 Есть backend bootstrap-модуль, который может отдать весь workspace одним запросом.
@@ -170,6 +224,36 @@
 Endpoint в dev-server:
 
 - `GET /api/bootstrap`
+
+### Catalog API
+
+Есть первый backend CRUD-слой для `groups` и `projects`.
+
+Файлы:
+
+- `src/server/api/catalog/schema.ts`
+- `src/server/api/catalog/service.ts`
+- `src/server/api/catalog/http.ts`
+- `src/server/api/catalog/index.ts`
+
+HTTP handlers:
+
+- `GET /api/catalog`
+- `POST /api/catalog/groups`
+- `PATCH /api/catalog/groups/:id`
+- `DELETE /api/catalog/groups/:id`
+- `POST /api/catalog/projects`
+- `PATCH /api/catalog/projects/:id`
+- `DELETE /api/catalog/projects/:id`
+
+Что уже заложено серверно:
+
+- системная группа `Без группы`
+- перевод проектов в `Без группы` при архиве группы
+- архивирование группы на 30 дней
+- архивирование проекта на 30 дней
+- очистка активных weekly/day/template/task-page сущностей при архиве проекта
+- сохранение достижений проекта через nullable-ссылки и snapshot-поля
 
 ### Auth layer
 
@@ -219,9 +303,11 @@ npm run dev:server
 - `PostgreSQL` установлен
 - локальная база `task_vasilich_v3` создана
 - Prisma migration применена
+- архивная миграция применена через `npx prisma migrate deploy`
 - `register` работает
 - `me` работает
 - `bootstrap` работает
+- `typecheck` чистый
 
 ## Auth flow во фронте
 
@@ -249,16 +335,20 @@ npm run dev:server
 - создание базы
 - `npx prisma generate`
 - `npx prisma migrate dev --name init`
+- `npx prisma migrate deploy`
 - запуск `npm run dev:server`
 - `register`
 - `me`
 - `bootstrap`
+- `npm run typecheck`
 
 ## Следующий логичный этап
 
 Следующий большой шаг для `V3`:
 
-- начать переносить реальные CRUD-операции с `localStorage` на backend API
+- подключить фронт `V3` к новому `catalog API`
+- перестать хранить `groups/projects` только в `localStorage`
+- потом переносить остальные сущности с `localStorage` на backend API
 
 Лучший безопасный порядок:
 
