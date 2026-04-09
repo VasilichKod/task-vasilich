@@ -4,11 +4,11 @@
   --bg: #ffffff;
   --bg2: #f5f5f3;
   --bg3: #eeede9;
-  --sidebar-bg: #3b3d42;
-  --sidebar-surface: #4a4d53;
-  --sidebar-text: #f2f2ee;
-  --sidebar-text-muted: rgba(242, 242, 238, 0.72);
-  --sidebar-border: rgba(255, 255, 255, 0.08);
+  --sidebar-bg: #0b0c0e;
+  --sidebar-surface: #13151a;
+  --sidebar-text: #e8e8e4;
+  --sidebar-text-muted: rgba(232, 232, 228, 0.45);
+  --sidebar-border: rgba(255, 255, 255, 0.06);
   --text: #1a1a18;
   --text2: #6b6b67;
   --text3: #a8a8a3;

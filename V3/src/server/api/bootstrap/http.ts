@@ -1,0 +1,70 @@
+import { ZodError } from 'zod';
+
+import { getWorkspaceBootstrap } from './get-workspace-bootstrap.js';
+import { workspaceBootstrapQuerySchema } from './schema.js';
+
+function json(data: unknown, status = 200) {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: {
+      'content-type': 'application/json; charset=utf-8',
+    },
+  });
+}
+
+export async function handleWorkspaceBootstrapRequest(request: Request) {
+  try {
+    const url = new URL(request.url);
+    const parsedQuery = workspaceBootstrapQuerySchema.parse({
+      userId: url.searchParams.get('userId'),
+      workspaceId: url.searchParams.get('workspaceId'),
+    });
+
+    const data = await getWorkspaceBootstrap(parsedQuery);
+
+    return json({
+      ok: true,
+      data,
+    });
+  } catch (error) {
+    if (error instanceof ZodError) {
+      return json(
+        {
+          ok: false,
+          error: 'INVALID_BOOTSTRAP_QUERY',
+          details: error.flatten(),
+        },
+        400,
+      );
+    }
+
+    if (error instanceof Error && error.message === 'FORBIDDEN_WORKSPACE_ACCESS') {
+      return json(
+        {
+          ok: false,
+          error: 'FORBIDDEN_WORKSPACE_ACCESS',
+        },
+        403,
+      );
+    }
+
+    if (error instanceof Error) {
+      return json(
+        {
+          ok: false,
+          error: 'BOOTSTRAP_REQUEST_FAILED',
+          message: error.message,
+        },
+        500,
+      );
+    }
+
+    return json(
+      {
+        ok: false,
+        error: 'BOOTSTRAP_REQUEST_FAILED',
+      },
+      500,
+    );
+  }
+}

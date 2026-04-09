@@ -1,4 +1,5 @@
 const ANTHROPIC_API_KEY = '';
+const API_BASE = window.location.origin.startsWith('http') ? window.location.origin : 'http://localhost:3000';
 
 const DAYS = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
 const COLORS = [
@@ -68,6 +69,8 @@ let newProjGroup = 'work';
 let newProjColor = COLORS[0];
 let newGroupColor = COLORS[0];
 let _dayResize = null;
+let authMode = 'login';
+let currentUser = null;
 
 const DEFAULT_PROFILE = {
   name: 'Степан',
@@ -83,6 +86,189 @@ const DEFAULT_SETTINGS = {
   openCurrentYearInAchievements: true,
   workspaceName: 'ДЕЙСТВИЯ',
 };
+
+function authFetch(path, options = {}) {
+  return fetch(`${API_BASE}${path}`, {
+    credentials: 'include',
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(options.headers || {}),
+    },
+  });
+}
+
+function setAuthError(message = '') {
+  const errorNode = document.getElementById('auth-error');
+  if (!message) {
+    errorNode.style.display = 'none';
+    errorNode.textContent = '';
+    return;
+  }
+  errorNode.textContent = message;
+  errorNode.style.display = 'block';
+}
+
+function switchAuthMode(mode) {
+  authMode = mode;
+  document.getElementById('auth-tab-login').classList.toggle('active', mode === 'login');
+  document.getElementById('auth-tab-register').classList.toggle('active', mode === 'register');
+  document.getElementById('auth-login-form').style.display = mode === 'login' ? 'flex' : 'none';
+  document.getElementById('auth-register-form').style.display = mode === 'register' ? 'flex' : 'none';
+  setAuthError('');
+}
+
+function showAuthShell() {
+  document.getElementById('auth-shell').style.display = 'grid';
+  document.getElementById('app').style.display = 'none';
+}
+
+function showAppShell() {
+  document.getElementById('auth-shell').style.display = 'none';
+  document.getElementById('app').style.display = 'grid';
+}
+
+function applyCurrentUser(user) {
+  currentUser = user;
+  state.profile = normalizeProfile({
+    ...state.profile,
+    name: user.profile?.name || state.profile.name,
+    email: user.email || state.profile.email,
+    role: user.profile?.role || state.profile.role,
+    city: user.profile?.city || state.profile.city,
+    about: user.profile?.about || state.profile.about,
+  });
+  state.settings.workspaceName = user.workspace?.name || state.settings.workspaceName;
+  const accountName = user.profile?.name || user.email || 'Пользователь';
+  document.getElementById('sidebar-account-name').textContent = accountName;
+  document.getElementById('sidebar-workspace-name').textContent = user.workspace?.name || state.settings.workspaceName;
+}
+
+async function fetchCurrentUserSession() {
+  const response = await authFetch('/api/auth/me', {
+    method: 'GET',
+    headers: {},
+  });
+
+  if (response.status === 401) {
+    return null;
+  }
+
+  const payload = await response.json();
+  if (!response.ok || !payload?.ok) {
+    throw new Error(payload?.error || 'AUTH_ME_FAILED');
+  }
+
+  return payload.data;
+}
+
+async function submitLogin(event) {
+  event.preventDefault();
+  setAuthError('');
+
+  const submitButton = document.getElementById('auth-login-submit');
+  submitButton.disabled = true;
+  submitButton.textContent = 'Входим...';
+
+  try {
+    const response = await authFetch('/api/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({
+        email: document.getElementById('login-email').value.trim(),
+        password: document.getElementById('login-password').value,
+      }),
+    });
+
+    const payload = await response.json();
+    if (!response.ok || !payload?.ok) {
+      throw new Error(payload?.error || 'LOGIN_FAILED');
+    }
+
+    const user = await fetchCurrentUserSession();
+    if (!user) {
+      throw new Error('AUTH_ME_FAILED');
+    }
+
+    applyCurrentUser(user);
+    save();
+    renderSidebarLists();
+    renderCurrentView();
+    showAppShell();
+  } catch (error) {
+    const code = error instanceof Error ? error.message : 'LOGIN_FAILED';
+    const message = code === 'INVALID_CREDENTIALS'
+      ? 'Неверная почта или пароль.'
+      : code === 'USER_IS_DISABLED'
+        ? 'Аккаунт отключен.'
+        : code === 'USER_HAS_NO_WORKSPACE'
+          ? 'Для пользователя не найдено рабочее пространство.'
+          : 'Не удалось войти. Проверь данные и попробуй ещё раз.';
+    setAuthError(message);
+  } finally {
+    submitButton.disabled = false;
+    submitButton.textContent = 'Войти';
+  }
+}
+
+async function submitRegister(event) {
+  event.preventDefault();
+  setAuthError('');
+
+  const submitButton = document.getElementById('auth-register-submit');
+  submitButton.disabled = true;
+  submitButton.textContent = 'Создаем...';
+
+  try {
+    const response = await authFetch('/api/auth/register', {
+      method: 'POST',
+      body: JSON.stringify({
+        name: document.getElementById('register-name').value.trim(),
+        email: document.getElementById('register-email').value.trim(),
+        password: document.getElementById('register-password').value,
+        workspaceName: document.getElementById('register-workspace-name').value.trim() || 'Действия',
+      }),
+    });
+
+    const payload = await response.json();
+    if (!response.ok || !payload?.ok) {
+      throw new Error(payload?.error || 'REGISTER_FAILED');
+    }
+
+    const user = await fetchCurrentUserSession();
+    if (!user) {
+      throw new Error('AUTH_ME_FAILED');
+    }
+
+    applyCurrentUser(user);
+    save();
+    renderSidebarLists();
+    renderCurrentView();
+    showAppShell();
+  } catch (error) {
+    const code = error instanceof Error ? error.message : 'REGISTER_FAILED';
+    const message = code === 'EMAIL_ALREADY_IN_USE'
+      ? 'Такая почта уже занята.'
+      : 'Не удалось создать аккаунт. Проверь поля и попробуй ещё раз.';
+    setAuthError(message);
+  } finally {
+    submitButton.disabled = false;
+    submitButton.textContent = 'Создать аккаунт';
+  }
+}
+
+async function logoutUser() {
+  try {
+    await authFetch('/api/auth/logout', {
+      method: 'POST',
+      body: JSON.stringify({}),
+    });
+  } catch (error) {
+    console.error(error);
+  }
+
+  currentUser = null;
+  showAuthShell();
+}
 
 function taskId() {
   return `task_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -420,7 +606,7 @@ function insertTask(wk, subId, dayIdx, task) {
 }
 
 function save() {
-  localStorage.setItem('wpv2', JSON.stringify({
+  localStorage.setItem('wpv3', JSON.stringify({
     groups: state.groups,
     subs: state.subs,
     recurring: state.recurring,
@@ -455,7 +641,7 @@ function seedSample() {
 
 function load() {
   try {
-    const raw = JSON.parse(localStorage.getItem('wpv2') || 'null');
+    const raw = JSON.parse(localStorage.getItem('wpv3') || 'null');
     if (raw) {
       state.groups = normalizeGroups(raw.groups);
       state.subs = normalizeSubs(raw.subs, state.groups);
@@ -561,11 +747,10 @@ function renderSidebarSummary() {
 function renderSidebarLists() {
   document.getElementById('app').classList.toggle('sidebar-collapsed', state.ui.sidebarCollapsed);
   document.querySelector('.sidebar-title').textContent = state.settings.workspaceName || DEFAULT_SETTINGS.workspaceName;
-  const collapseBtn = document.querySelector('.sidebar-collapse-btn');
-  collapseBtn.innerHTML = state.ui.sidebarCollapsed
-    ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>'
-    : '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>';
-  collapseBtn.title = state.ui.sidebarCollapsed ? 'Развернуть меню' : 'Свернуть меню';
+  document.getElementById('sidebar-workspace-name').textContent = state.settings.workspaceName || DEFAULT_SETTINGS.workspaceName;
+  const collapseButton = document.querySelector('.sidebar-collapse-btn');
+  collapseButton.classList.toggle('collapsed', state.ui.sidebarCollapsed);
+  collapseButton.title = state.ui.sidebarCollapsed ? 'Развернуть меню' : 'Свернуть меню';
   document.querySelectorAll('[data-view]').forEach(button => {
     button.classList.toggle('active', button.dataset.view === state.currentView);
   });
@@ -892,6 +1077,7 @@ function renderWinsView() {
                               <span class="wins-item-date">${escapeHtml(formatAchievementDate(item.date))}</span>
                             </button>
                           `).join('')}
+                          <button class="task-entry-trigger wins-add-trigger" type="button" onclick="openAchievementModalForProject('${year}', '${project.id}')"></button>
                         </div>
                       </article>
                     `;
@@ -957,15 +1143,19 @@ function renderProfileView() {
         <div class="settings-card-title">Статус аккаунта</div>
         <div class="settings-info-row">
           <span>Хранение данных</span>
-          <b>Локально в браузере</b>
+          <b>Локально + backend foundation</b>
         </div>
         <div class="settings-info-row">
           <span>Авторизация</span>
-          <b>Пока не подключена</b>
+          <b>${currentUser ? 'Подключена' : 'Не активна'}</b>
         </div>
         <div class="settings-info-row">
           <span>Синхронизация</span>
-          <b>Появится после backend</b>
+          <b>Следующий этап после CRUD API</b>
+        </div>
+        <div class="settings-info-row">
+          <span>Аккаунт</span>
+          <b>${escapeHtml(currentUser?.email || state.profile.email || 'Локальный профиль')}</b>
         </div>
       </section>
     </div>
@@ -1199,7 +1389,11 @@ function renderAchievementProjectOptions() {
   select.innerHTML = projects.map(project => `<option value="${project.id}">${escapeHtml(project.label)}</option>`).join('');
 }
 
-function openAchievementModal(achievementId = null) {
+function openAchievementModalForProject(year, subId) {
+  openAchievementModal(null, year, subId);
+}
+
+function openAchievementModal(achievementId = null, presetYear = null, presetSubId = null) {
   manageAchievementId = achievementId;
   const record = achievementId ? findAchievementRecord(achievementId) : null;
   const currentYear = String(new Date().getFullYear());
@@ -1209,14 +1403,14 @@ function openAchievementModal(achievementId = null) {
     `<option value="${group.id}">${escapeHtml(group.label)}</option>`
   ).join('');
 
-  const project = record ? getSub(record.subId) : state.subs[0];
-  const year = record?.year || currentYear;
+  const project = record ? getSub(record.subId) : (presetSubId ? getSub(presetSubId) : state.subs[0]);
+  const year = record?.year || presetYear || currentYear;
   const groupId = project?.group || state.groups[0]?.id || '';
 
   document.getElementById('achievement-year-select').value = year;
   document.getElementById('achievement-group-select').value = groupId;
   renderAchievementProjectOptions();
-  document.getElementById('achievement-project-select').value = record?.subId || project?.id || '';
+  document.getElementById('achievement-project-select').value = record?.subId || presetSubId || project?.id || '';
   document.getElementById('achievement-date-input').value = record?.item.date || '';
   document.getElementById('achievement-text-input').value = record?.item.text || '';
   document.getElementById('achievement-modal-title').textContent = record ? 'Редактировать достижение' : 'Добавить достижение';
@@ -2377,25 +2571,48 @@ async function analyzeAI() {
   }
 }
 
-load();
-document.getElementById('task-day-select').innerHTML = DAYS.map((day, index) => `<option value="${index}">${day}</option>`).join('');
-document.getElementById('create-task-group-select').addEventListener('change', renderCreateTaskOptions);
-document.getElementById('create-task-day-select').addEventListener('change', renderCreateTaskOptions);
-document.getElementById('create-task-project-select').addEventListener('change', event => {
-  if (_createTaskMeta) _createTaskMeta.subId = event.target.value;
-});
-document.getElementById('day-project-group-select').addEventListener('change', renderDayProjectOptions);
-document.getElementById('day-project-day-select').addEventListener('change', renderDayProjectOptions);
-document.getElementById('recurring-filter-group').addEventListener('change', event => {
-  state.recurringFilterGroup = event.target.value;
-  state.recurringFilterProject = 'all';
-  renderRecurringFilters();
-  renderRecurringList();
-});
-document.getElementById('recurring-filter-project').addEventListener('change', event => {
-  state.recurringFilterProject = event.target.value;
-  renderRecurringList();
-});
-document.getElementById('achievement-group-select').addEventListener('change', renderAchievementProjectOptions);
-renderSidebarLists();
-renderCurrentView();
+function bindStaticUI() {
+  document.getElementById('task-day-select').innerHTML = DAYS.map((day, index) => `<option value="${index}">${day}</option>`).join('');
+  document.getElementById('create-task-group-select').addEventListener('change', renderCreateTaskOptions);
+  document.getElementById('create-task-day-select').addEventListener('change', renderCreateTaskOptions);
+  document.getElementById('create-task-project-select').addEventListener('change', event => {
+    if (_createTaskMeta) _createTaskMeta.subId = event.target.value;
+  });
+  document.getElementById('day-project-group-select').addEventListener('change', renderDayProjectOptions);
+  document.getElementById('day-project-day-select').addEventListener('change', renderDayProjectOptions);
+  document.getElementById('recurring-filter-group').addEventListener('change', event => {
+    state.recurringFilterGroup = event.target.value;
+    state.recurringFilterProject = 'all';
+    renderRecurringFilters();
+    renderRecurringList();
+  });
+  document.getElementById('recurring-filter-project').addEventListener('change', event => {
+    state.recurringFilterProject = event.target.value;
+    renderRecurringList();
+  });
+  document.getElementById('achievement-group-select').addEventListener('change', renderAchievementProjectOptions);
+}
+
+async function initApp() {
+  load();
+  bindStaticUI();
+  switchAuthMode('login');
+
+  try {
+    const user = await fetchCurrentUserSession();
+    if (!user) {
+      showAuthShell();
+      return;
+    }
+
+    applyCurrentUser(user);
+    renderSidebarLists();
+    renderCurrentView();
+    showAppShell();
+  } catch (error) {
+    console.error(error);
+    showAuthShell();
+  }
+}
+
+initApp();

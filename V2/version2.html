@@ -17,32 +17,34 @@
             <div class="sidebar-kicker">Vasilich</div>
             <div class="sidebar-title">ДЕЙСТВИЯ</div>
           </div>
-          <button class="sidebar-collapse-btn" type="button" onclick="toggleSidebarCollapsed()" title="Свернуть меню">⇤</button>
+          <button class="sidebar-collapse-btn" type="button" onclick="toggleSidebarCollapsed()" title="Свернуть меню">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+          </button>
         </div>
       </div>
 
       <div class="sidebar-section">
         <div class="sidebar-label">Навигация</div>
-        <button class="sidebar-link active" type="button" title="График" data-view="graph" onclick="switchView('graph')"><span class="sidebar-link-icon">▤</span><span class="sidebar-link-text">График</span></button>
-        <button class="sidebar-link" type="button" title="Задачи" data-view="tasks" onclick="switchView('tasks')"><span class="sidebar-link-icon">☰</span><span class="sidebar-link-text">Задачи</span></button>
-        <button class="sidebar-link" type="button" title="Достижения" data-view="wins" onclick="switchView('wins')"><span class="sidebar-link-icon">✦</span><span class="sidebar-link-text">Достижения</span></button>
-        <button class="sidebar-link" type="button" title="История и аналитика" data-view="history" onclick="switchView('history')"><span class="sidebar-link-icon">◔</span><span class="sidebar-link-text">История и аналитика</span></button>
+        <button class="sidebar-link active" type="button" title="График" data-view="graph" onclick="switchView('graph')"><span class="sidebar-link-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg></span><span class="sidebar-link-text">График</span></button>
+        <button class="sidebar-link" type="button" title="Задачи" data-view="tasks" onclick="switchView('tasks')"><span class="sidebar-link-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg></span><span class="sidebar-link-text">Задачи</span></button>
+        <button class="sidebar-link" type="button" title="Достижения" data-view="wins" onclick="switchView('wins')"><span class="sidebar-link-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></span><span class="sidebar-link-text">Достижения</span></button>
+        <button class="sidebar-link" type="button" title="История и аналитика" data-view="history" onclick="switchView('history')"><span class="sidebar-link-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></span><span class="sidebar-link-text">История и аналитика</span></button>
       </div>
 
       <div class="sidebar-section">
         <div class="sidebar-label">Управление</div>
-        <button class="sidebar-action" type="button" onclick="toggleSidebarSection('projects')" title="Проекты"><span class="sidebar-link-icon">◩</span><span class="sidebar-link-text">Проекты</span></button>
+        <button class="sidebar-action" type="button" onclick="toggleSidebarSection('projects')" title="Проекты"><span class="sidebar-link-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg></span><span class="sidebar-link-text">Проекты</span></button>
         <div class="sidebar-projects sidebar-hide-on-collapse" id="sidebar-projects"></div>
-        <button class="sidebar-action" type="button" onclick="toggleSidebarSection('groups')" title="Группы"><span class="sidebar-link-icon">▥</span><span class="sidebar-link-text">Группы</span></button>
+        <button class="sidebar-action" type="button" onclick="toggleSidebarSection('groups')" title="Группы"><span class="sidebar-link-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg></span><span class="sidebar-link-text">Группы</span></button>
         <div class="sidebar-groups sidebar-hide-on-collapse" id="sidebar-groups"></div>
-        <button class="sidebar-action" type="button" onclick="openProjectTemplateManage()" title="Шаблоны"><span class="sidebar-link-icon">⌘</span><span class="sidebar-link-text">Шаблоны</span></button>
-        <button class="sidebar-action" type="button" onclick="openRecurringManage()" title="Постоянные задачи"><span class="sidebar-link-icon">∞</span><span class="sidebar-link-text">Постоянные задачи</span></button>
+        <button class="sidebar-action" type="button" onclick="openProjectTemplateManage()" title="Шаблоны"><span class="sidebar-link-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></span><span class="sidebar-link-text">Шаблоны</span></button>
+        <button class="sidebar-action" type="button" onclick="openRecurringManage()" title="Постоянные задачи"><span class="sidebar-link-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg></span><span class="sidebar-link-text">Постоянные задачи</span></button>
       </div>
 
       <div class="sidebar-section">
         <div class="sidebar-label">Система</div>
-        <button class="sidebar-action" type="button" title="Профиль" data-view="profile" onclick="switchView('profile')"><span class="sidebar-link-icon">◉</span><span class="sidebar-link-text">Профиль</span></button>
-        <button class="sidebar-action" type="button" title="Настройки" data-view="settings" onclick="switchView('settings')"><span class="sidebar-link-icon">⚙</span><span class="sidebar-link-text">Настройки</span></button>
+        <button class="sidebar-action" type="button" title="Профиль" data-view="profile" onclick="switchView('profile')"><span class="sidebar-link-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></span><span class="sidebar-link-text">Профиль</span></button>
+        <button class="sidebar-action" type="button" title="Настройки" data-view="settings" onclick="switchView('settings')"><span class="sidebar-link-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/><path d="M12 2v2M12 20v2M2 12H4M20 12h2"/></svg></span><span class="sidebar-link-text">Настройки</span></button>
       </div>
 
       <div class="sidebar-summary" id="sidebar-summary"></div>
