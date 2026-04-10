@@ -148,6 +148,20 @@ function buildAchievementProjectsMap(
   return result;
 }
 
+function buildAchievementYears(
+  rows: Array<{ achievementYear: number }>,
+  achievements: Array<{ achievementYear: number }>,
+  achievementPageProjects: Array<{ achievementYear: number }>,
+) {
+  const years = new Set([
+    ...rows.map(row => String(row.achievementYear)),
+    ...achievements.map(item => String(item.achievementYear)),
+    ...achievementPageProjects.map(item => String(item.achievementYear)),
+  ]);
+
+  return Array.from(years).sort((a, b) => Number(b) - Number(a));
+}
+
 function buildProjectTemplatesMap(
   rows: Array<{
     groupId: string;
@@ -221,6 +235,7 @@ export async function getWorkspaceBootstrap(input: WorkspaceBootstrapInput) {
     achievements,
     taskPageProjects,
     achievementPageProjects,
+    achievementYears,
   ] = await Promise.all([
     prisma.workspace.findUniqueOrThrow({
       where: { id: workspaceId },
@@ -365,6 +380,13 @@ export async function getWorkspaceBootstrap(input: WorkspaceBootstrapInput) {
         projectId: true,
       },
     }),
+    prisma.achievementYear.findMany({
+      where: { workspaceId },
+      orderBy: [{ sortOrder: 'asc' }, { achievementYear: 'desc' }],
+      select: {
+        achievementYear: true,
+      },
+    }),
   ]);
 
   return {
@@ -409,6 +431,7 @@ export async function getWorkspaceBootstrap(input: WorkspaceBootstrapInput) {
     taskProjects: buildTaskProjectsMap(taskPageProjects),
     achievements: buildAchievementsMap(achievements),
     achievementProjects: buildAchievementProjectsMap(achievementPageProjects),
+    achievementYears: buildAchievementYears(achievementYears, achievements, achievementPageProjects),
     data: buildWeeklyTaskMap(weeklyTasks),
     projectTemplates: buildProjectTemplatesMap(projectTemplates),
     dayProjects: buildDayProjectsMap(dayProjects),

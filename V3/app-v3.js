@@ -36,6 +36,7 @@ let state = {
   taskProjects: {},
   achievements: {},
   achievementProjects: {},
+  achievementYears: [],
   profile: {},
   settings: {},
   data: {},
@@ -77,6 +78,13 @@ let authMode = 'login';
 let currentUser = null;
 let _confirmMeta = null;
 let _sidebarDragMeta = null;
+let _planningSyncTimer = null;
+let _lastPlanningSyncSignature = '';
+let _isApplyingServerPlanning = false;
+let _achievementsSyncTimer = null;
+let _lastAchievementsSyncSignature = '';
+let _isApplyingServerAchievements = false;
+let _hasPersistedLocalWorkspace = false;
 
 const DEFAULT_PROFILE = {
   name: 'Степан',
@@ -237,11 +245,219 @@ async function fetchAccountFromServer() {
   });
 }
 
+async function fetchBootstrapFromServer() {
+  if (!currentUser?.id || !currentUser?.workspace?.id) {
+    throw new Error('BOOTSTRAP_SESSION_MISSING');
+  }
+
+  return apiJson(
+    `/api/bootstrap?userId=${encodeURIComponent(currentUser.id)}&workspaceId=${encodeURIComponent(currentUser.workspace.id)}`,
+    {
+      method: 'GET',
+      headers: {},
+    },
+  );
+}
+
 async function syncAccountFromServer() {
   const account = await fetchAccountFromServer();
   applyAccountPayload(account);
   save();
   return account;
+}
+
+function buildAchievementsPayload() {
+  return {
+    achievementYears: state.achievementYears,
+    achievements: state.achievements,
+    achievementProjects: state.achievementProjects,
+  };
+}
+
+function buildPlanningPayload() {
+  return {
+    backlog: state.backlog,
+    taskProjects: state.taskProjects,
+    recurring: state.recurring,
+    recurringStatus: state.recurringStatus,
+    data: state.data,
+    projectTemplates: state.projectTemplates,
+    dayProjects: state.dayProjects,
+  };
+}
+
+function getPlanningSyncSignature() {
+  return JSON.stringify(buildPlanningPayload());
+}
+
+function getAchievementsSyncSignature() {
+  return JSON.stringify(buildAchievementsPayload());
+}
+
+function hasAnyObjectEntries(value) {
+  return value && typeof value === 'object' && Object.keys(value).length > 0;
+}
+
+function hasLocalPlanningData() {
+  if (!_hasPersistedLocalWorkspace) return false;
+  return (
+    state.recurring.length > 0 ||
+    hasAnyObjectEntries(state.recurringStatus) ||
+    hasAnyObjectEntries(state.backlog) ||
+    hasAnyObjectEntries(state.data) ||
+    hasAnyObjectEntries(state.projectTemplates) ||
+    hasAnyObjectEntries(state.dayProjects)
+  );
+}
+
+function isServerPlanningEmpty(payload) {
+  return !(
+    (payload?.recurring || []).length > 0 ||
+    hasAnyObjectEntries(payload?.recurringStatus) ||
+    hasAnyObjectEntries(payload?.backlog) ||
+    hasAnyObjectEntries(payload?.data) ||
+    hasAnyObjectEntries(payload?.projectTemplates) ||
+    hasAnyObjectEntries(payload?.dayProjects)
+  );
+}
+
+function hasLocalAchievementsData() {
+  if (!_hasPersistedLocalWorkspace) return false;
+  return (
+    hasAnyObjectEntries(state.achievements) ||
+    Object.values(state.achievementProjects || {}).some(groupMap =>
+      Object.values(groupMap || {}).some(projectIds => Array.isArray(projectIds) && projectIds.length > 0),
+    ) ||
+    (state.achievementYears || []).some(year => year !== String(new Date().getFullYear()))
+  );
+}
+
+function isServerAchievementsEmpty(payload) {
+  return !(
+    (payload?.achievementYears || []).length > 0 ||
+    hasAnyObjectEntries(payload?.achievements) ||
+    hasAnyObjectEntries(payload?.achievementProjects)
+  );
+}
+
+function applyPlanningPayload(payload) {
+  _isApplyingServerPlanning = true;
+  try {
+    state.recurring = normalizeRecurring(payload?.recurring, state.subs);
+    state.recurringStatus = payload?.recurringStatus || {};
+    state.backlog = normalizeBacklog(payload?.backlog);
+    state.taskProjects = normalizeTaskProjects(
+      payload?.taskProjects ?? buildInitialGroupProjectMap(state.groups, state.subs),
+      state.groups,
+      state.subs,
+    );
+    state.data = normalizeData(payload?.data);
+    state.projectTemplates = payload?.projectTemplates || {};
+    ensureProjectTemplates();
+    state.dayProjects = normalizeDayProjects(payload?.dayProjects);
+    _lastPlanningSyncSignature = getPlanningSyncSignature();
+  } finally {
+    _isApplyingServerPlanning = false;
+  }
+}
+
+function applyAchievementsPayload(payload) {
+  _isApplyingServerAchievements = true;
+  try {
+    state.achievements = normalizeAchievements(payload?.achievements, state.subs);
+    state.achievementProjects = normalizeAchievementProjects(
+      payload?.achievementProjects ?? buildInitialAchievementProjectMap(state.groups, state.subs, state.achievements),
+      state.groups,
+      state.subs,
+      state.achievements,
+      payload?.achievementYears,
+    );
+    state.achievementYears = normalizeAchievementYears(
+      payload?.achievementYears,
+      state.achievements,
+      state.achievementProjects,
+    );
+    _lastAchievementsSyncSignature = getAchievementsSyncSignature();
+  } finally {
+    _isApplyingServerAchievements = false;
+  }
+}
+
+async function syncPlanningFromServer() {
+  const payload = await fetchBootstrapFromServer();
+  const shouldSeedPlanningFromLocal = isServerPlanningEmpty(payload) && hasLocalPlanningData();
+  const shouldSeedAchievementsFromLocal = isServerAchievementsEmpty(payload) && hasLocalAchievementsData();
+
+  if (shouldSeedPlanningFromLocal) {
+    await syncPlanningStateToServer();
+  } else {
+    applyPlanningPayload(payload);
+  }
+
+  if (shouldSeedAchievementsFromLocal) {
+    await syncAchievementsStateToServer();
+  } else {
+    applyAchievementsPayload(payload);
+  }
+
+  save();
+  return payload;
+}
+
+async function syncPlanningStateToServer() {
+  if (!currentUser) return;
+
+  const signature = getPlanningSyncSignature();
+  if (signature === _lastPlanningSyncSignature) return;
+
+  await apiJson('/api/planning-state', {
+    method: 'PATCH',
+    body: JSON.stringify(buildPlanningPayload()),
+  });
+
+  _lastPlanningSyncSignature = signature;
+}
+
+function queuePlanningSync() {
+  if (!currentUser || _isApplyingServerPlanning) return;
+  if (_planningSyncTimer) clearTimeout(_planningSyncTimer);
+
+  _planningSyncTimer = setTimeout(async () => {
+    _planningSyncTimer = null;
+    try {
+      await syncPlanningStateToServer();
+    } catch (error) {
+      console.error('PLANNING_SYNC_FAILED', error);
+    }
+  }, 250);
+}
+
+async function syncAchievementsStateToServer() {
+  if (!currentUser) return;
+
+  const signature = getAchievementsSyncSignature();
+  if (signature === _lastAchievementsSyncSignature) return;
+
+  await apiJson('/api/achievements-state', {
+    method: 'PATCH',
+    body: JSON.stringify(buildAchievementsPayload()),
+  });
+
+  _lastAchievementsSyncSignature = signature;
+}
+
+function queueAchievementsSync() {
+  if (!currentUser || _isApplyingServerAchievements) return;
+  if (_achievementsSyncTimer) clearTimeout(_achievementsSyncTimer);
+
+  _achievementsSyncTimer = setTimeout(async () => {
+    _achievementsSyncTimer = null;
+    try {
+      await syncAchievementsStateToServer();
+    } catch (error) {
+      console.error('ACHIEVEMENTS_SYNC_FAILED', error);
+    }
+  }, 250);
 }
 
 async function submitLogin(event) {
@@ -274,6 +490,7 @@ async function submitLogin(event) {
     applyCurrentUser(user);
     await syncCatalogFromServer();
     await syncAccountFromServer();
+    await syncPlanningFromServer();
     state.currentView = state.settings.defaultView || 'graph';
     save();
     renderSidebarLists();
@@ -327,6 +544,7 @@ async function submitRegister(event) {
     applyCurrentUser(user);
     await syncCatalogFromServer();
     await syncAccountFromServer();
+    await syncPlanningFromServer();
     state.currentView = state.settings.defaultView || 'graph';
     save();
     renderSidebarLists();
@@ -428,8 +646,26 @@ function normalizeAchievements(achievements, subs) {
   return normalized;
 }
 
-function normalizeAchievementProjects(achievementProjects, groups, subs, achievements) {
-  const years = new Set([...Object.keys(achievements || {}), String(new Date().getFullYear())]);
+function normalizeAchievementYears(achievementYears, achievements, achievementProjects) {
+  const years = new Set([
+    ...(Array.isArray(achievementYears) ? achievementYears : []),
+    ...Object.keys(achievements || {}),
+    ...Object.keys(achievementProjects || {}),
+    String(new Date().getFullYear()),
+  ]);
+
+  return Array.from(years)
+    .filter(year => /^\d{4}$/.test(String(year)))
+    .sort((a, b) => Number(b) - Number(a));
+}
+
+function normalizeAchievementProjects(achievementProjects, groups, subs, achievements, achievementYears = []) {
+  const years = new Set([
+    ...(Array.isArray(achievementYears) ? achievementYears : []),
+    ...Object.keys(achievements || {}),
+    ...Object.keys(achievementProjects || {}),
+    String(new Date().getFullYear()),
+  ]);
   const normalized = {};
   years.forEach(year => {
     normalized[year] = {};
@@ -728,6 +964,7 @@ function applyCatalog(groups, subs) {
     state.groups,
     state.subs,
     state.achievements,
+    state.achievementYears,
   );
   ensureProjectTemplates();
   state.dayProjects = normalizeDayProjects(state.dayProjects);
@@ -954,6 +1191,7 @@ function save() {
     taskProjects: state.taskProjects,
     achievements: state.achievements,
     achievementProjects: state.achievementProjects,
+    achievementYears: state.achievementYears,
     profile: state.profile,
     settings: state.settings,
     data: state.data,
@@ -962,6 +1200,8 @@ function save() {
     dayColumnWidths: state.dayColumnWidths,
     sidebarCollapsed: state.ui.sidebarCollapsed,
   }));
+  queuePlanningSync();
+  queueAchievementsSync();
 }
 
 function seedSample() {
@@ -982,6 +1222,7 @@ function load() {
   try {
     const raw = JSON.parse(localStorage.getItem('wpv3') || 'null');
     if (raw) {
+      _hasPersistedLocalWorkspace = true;
       state.groups = normalizeGroups(raw.groups);
       state.subs = normalizeSubs(raw.subs, state.groups);
       state.recurring = normalizeRecurring(raw.recurring, state.subs);
@@ -998,6 +1239,12 @@ function load() {
         state.groups,
         state.subs,
         state.achievements,
+        raw.achievementYears,
+      );
+      state.achievementYears = normalizeAchievementYears(
+        raw.achievementYears,
+        state.achievements,
+        state.achievementProjects,
       );
       state.profile = normalizeProfile(raw.profile);
       state.settings = normalizeSettings(raw.settings);
@@ -1019,6 +1266,8 @@ function load() {
     console.warn(error);
   }
 
+  _hasPersistedLocalWorkspace = false;
+
   state.groups = normalizeGroups(DEFAULT_GROUPS);
   state.subs = normalizeSubs(DEFAULT_SUBS, state.groups);
   state.recurring = [];
@@ -1031,7 +1280,9 @@ function load() {
     state.groups,
     state.subs,
     state.achievements,
+    [],
   );
+  state.achievementYears = normalizeAchievementYears([], state.achievements, state.achievementProjects);
   state.profile = normalizeProfile({});
   state.settings = normalizeSettings({});
   state.data = {};
@@ -1457,11 +1708,11 @@ function renderTasksView() {
 }
 
 function getAchievementYears() {
-  const years = Object.keys(state.achievements || {});
-  if (!years.length) {
-    return [String(new Date().getFullYear())];
-  }
-  return years.sort((a, b) => Number(b) - Number(a));
+  return normalizeAchievementYears(
+    state.achievementYears,
+    state.achievements,
+    state.achievementProjects,
+  );
 }
 
 function formatAchievementDate(dateString) {
@@ -1799,9 +2050,9 @@ async function saveSettings() {
 
 function buildExportPayload() {
   return {
-    version: 2,
+    version: 3,
     exportedAt: new Date().toISOString(),
-    app: 'Task Vasilich V2',
+    app: 'Task Vasilich V3',
     groups: state.groups,
     subs: state.subs,
     recurring: state.recurring,
@@ -1810,6 +2061,7 @@ function buildExportPayload() {
     taskProjects: state.taskProjects,
     achievements: state.achievements,
     achievementProjects: state.achievementProjects,
+    achievementYears: state.achievementYears,
     profile: state.profile,
     settings: state.settings,
     data: state.data,
@@ -1866,6 +2118,12 @@ async function importAllDataFromFile(event) {
       state.groups,
       state.subs,
       state.achievements,
+      raw.achievementYears,
+    );
+    state.achievementYears = normalizeAchievementYears(
+      raw.achievementYears,
+      state.achievements,
+      state.achievementProjects,
     );
     state.profile = normalizeProfile(raw.profile);
     state.settings = normalizeSettings(raw.settings);
@@ -1929,6 +2187,11 @@ function openAchievementYearPrompt() {
   if (!state.achievementProjects[year]) {
     state.achievementProjects[year] = {};
   }
+  state.achievementYears = normalizeAchievementYears(
+    [...state.achievementYears, year],
+    state.achievements,
+    state.achievementProjects,
+  );
   state.winsYearFilter = year;
   state.ui.achievementYearsOpen[year] = true;
   save();
@@ -3356,6 +3619,7 @@ async function initApp() {
     applyCurrentUser(user);
     await syncCatalogFromServer();
     await syncAccountFromServer();
+    await syncPlanningFromServer();
     state.currentView = state.settings.defaultView || state.currentView;
     renderSidebarLists();
     renderCurrentView();

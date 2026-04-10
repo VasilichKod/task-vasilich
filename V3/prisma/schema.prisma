@@ -76,6 +76,7 @@ model Workspace {
   taskPageProjects TaskPageProject[]
   achievements Achievement[]
   achievementPageProjects AchievementPageProject[]
+  achievementYears AchievementYear[]
   userSettings UserSetting[]
 
   @@index([ownerUserId])
@@ -302,6 +303,21 @@ model Achievement {
 
   @@index([workspaceId, achievementYear, projectId, achievementDate])
   @@map("achievements")
+}
+
+model AchievementYear {
+  id              String    @id @default(cuid())
+  workspaceId     String    @map("workspace_id")
+  achievementYear Int       @map("achievement_year")
+  sortOrder       Int       @default(0) @map("sort_order")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  workspace       Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, achievementYear])
+  @@index([workspaceId, sortOrder, achievementYear])
+  @@map("achievement_years")
 }
 
 model AchievementPageProject {

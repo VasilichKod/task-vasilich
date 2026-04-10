@@ -8,6 +8,8 @@ import {
   handleUpdateProfileRequest,
   handleUpdateSettingsRequest,
 } from '../api/account/index.js';
+import { handleSaveAchievementsStateRequest } from '../api/achievements/index.js';
+import { handleSavePlanningStateRequest } from '../api/planning/index.js';
 import {
   handleArchiveGroupRequest,
   handleArchiveProjectRequest,
@@ -137,6 +139,14 @@ async function route(request: Request) {
 
   if (request.method === 'PATCH' && url.pathname === '/api/account/settings') {
     return withCors(request, await handleUpdateSettingsRequest(request));
+  }
+
+  if (request.method === 'PATCH' && url.pathname === '/api/planning-state') {
+    return withCors(request, await handleSavePlanningStateRequest(request));
+  }
+
+  if (request.method === 'PATCH' && url.pathname === '/api/achievements-state') {
+    return withCors(request, await handleSaveAchievementsStateRequest(request));
   }
 
   if (request.method === 'GET' && url.pathname === '/api/catalog') {
