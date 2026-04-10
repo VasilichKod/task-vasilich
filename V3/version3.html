@@ -432,6 +432,23 @@
     </div>
   </div>
 
+  <!-- Confirm modal -->
+  <div class="modal-bg" id="confirm-modal" onclick="handleModalBackdrop(event, 'confirm')">
+    <div class="modal">
+      <div class="modal-header">
+        <div class="modal-title" id="confirm-modal-title">Подтверждение</div>
+        <button class="modal-close" type="button" onclick="closeConfirmModal()">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="modal-copy" id="confirm-modal-copy"></div>
+      <div class="modal-actions modal-actions-right">
+        <button type="button" onclick="closeConfirmModal()">Отмена</button>
+        <button id="confirm-modal-submit" class="danger" type="button" onclick="submitConfirmModal()">Удалить</button>
+      </div>
+    </div>
+  </div>
+
   <script src="./app-v3.js"></script>
 </body>
 </html>

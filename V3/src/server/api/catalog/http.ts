@@ -6,7 +6,10 @@ import {
   archiveProject,
   createGroup,
   createProject,
+  getArchivedCatalog,
   getCatalog,
+  restoreGroup,
+  restoreProject,
   updateGroup,
   updateProject,
 } from './service.js';
@@ -48,6 +51,17 @@ export async function handleGetCatalogRequest(request: Request) {
   }
 }
 
+export async function handleGetArchivedCatalogRequest(request: Request) {
+  try {
+    const session = await getAuthorizedSession(request);
+    const data = await getArchivedCatalog(session.userId, session.workspaceId);
+
+    return json({ ok: true, data });
+  } catch (error) {
+    return handleCatalogError(error, 'GET_ARCHIVED_CATALOG_FAILED');
+  }
+}
+
 export async function handleCreateGroupRequest(request: Request) {
   try {
     const session = await getAuthorizedSession(request);
@@ -85,6 +99,18 @@ export async function handleArchiveGroupRequest(request: Request, groupId: strin
   }
 }
 
+export async function handleRestoreGroupRequest(request: Request, groupId: string) {
+  try {
+    const session = await getAuthorizedSession(request);
+    const params = entityIdSchema.parse({ id: groupId });
+    const data = await restoreGroup(session.userId, session.workspaceId, params.id);
+
+    return json({ ok: true, data });
+  } catch (error) {
+    return handleCatalogError(error, 'RESTORE_GROUP_FAILED');
+  }
+}
+
 export async function handleCreateProjectRequest(request: Request) {
   try {
     const session = await getAuthorizedSession(request);
@@ -119,6 +145,18 @@ export async function handleArchiveProjectRequest(request: Request, projectId: s
     return json({ ok: true, data });
   } catch (error) {
     return handleCatalogError(error, 'ARCHIVE_PROJECT_FAILED');
+  }
+}
+
+export async function handleRestoreProjectRequest(request: Request, projectId: string) {
+  try {
+    const session = await getAuthorizedSession(request);
+    const params = entityIdSchema.parse({ id: projectId });
+    const data = await restoreProject(session.userId, session.workspaceId, params.id);
+
+    return json({ ok: true, data });
+  } catch (error) {
+    return handleCatalogError(error, 'RESTORE_PROJECT_FAILED');
   }
 }
 

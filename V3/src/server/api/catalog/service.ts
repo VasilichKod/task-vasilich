@@ -90,6 +90,33 @@ export async function getCatalog(userId: string, workspaceId: string) {
   return { groups, projects };
 }
 
+export async function getArchivedCatalog(userId: string, workspaceId: string) {
+  await assertWorkspaceAccess(userId, workspaceId);
+
+  const [groups, projects] = await Promise.all([
+    prisma.group.findMany({
+      where: {
+        workspaceId,
+        archivedAt: {
+          not: null,
+        },
+      },
+      orderBy: [{ archivedAt: 'desc' }, { updatedAt: 'desc' }],
+    }),
+    prisma.project.findMany({
+      where: {
+        workspaceId,
+        archivedAt: {
+          not: null,
+        },
+      },
+      orderBy: [{ archivedAt: 'desc' }, { updatedAt: 'desc' }],
+    }),
+  ]);
+
+  return { groups, projects };
+}
+
 export async function createGroup(
   userId: string,
   workspaceId: string,
@@ -232,6 +259,31 @@ export async function archiveGroup(userId: string, workspaceId: string, groupId:
         deleteAfterAt,
       },
     });
+  });
+}
+
+export async function restoreGroup(userId: string, workspaceId: string, groupId: string) {
+  await assertWorkspaceAccess(userId, workspaceId);
+
+  const group = await prisma.group.findFirst({
+    where: {
+      id: groupId,
+      workspaceId,
+    },
+  });
+
+  if (!group) {
+    throw new Error('GROUP_NOT_FOUND');
+  }
+
+  return prisma.group.update({
+    where: {
+      id: groupId,
+    },
+    data: {
+      archivedAt: null,
+      deleteAfterAt: null,
+    },
   });
 }
 
@@ -446,5 +498,30 @@ export async function archiveProject(userId: string, workspaceId: string, projec
         deleteAfterAt,
       },
     });
+  });
+}
+
+export async function restoreProject(userId: string, workspaceId: string, projectId: string) {
+  await assertWorkspaceAccess(userId, workspaceId);
+
+  const project = await prisma.project.findFirst({
+    where: {
+      id: projectId,
+      workspaceId,
+    },
+  });
+
+  if (!project) {
+    throw new Error('PROJECT_NOT_FOUND');
+  }
+
+  return prisma.project.update({
+    where: {
+      id: projectId,
+    },
+    data: {
+      archivedAt: null,
+      deleteAfterAt: null,
+    },
   });
 }

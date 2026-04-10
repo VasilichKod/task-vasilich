@@ -54,6 +54,10 @@ let state = {
     achievementYearsOpen: {},
   },
   dayColumnWidths: {},
+  archivedCatalog: {
+    groups: [],
+    subs: [],
+  },
 };
 
 let _taskMeta = null;
@@ -71,6 +75,8 @@ let newGroupColor = COLORS[0];
 let _dayResize = null;
 let authMode = 'login';
 let currentUser = null;
+let _confirmMeta = null;
+let _sidebarDragMeta = null;
 
 const DEFAULT_PROFILE = {
   name: 'Степан',
@@ -96,6 +102,34 @@ function authFetch(path, options = {}) {
       ...(options.headers || {}),
     },
   });
+}
+
+async function apiJson(path, options = {}) {
+  const response = await authFetch(path, options);
+  const payload = await response.json();
+
+  if (!response.ok || !payload?.ok) {
+    throw new Error(payload?.error || 'API_REQUEST_FAILED');
+  }
+
+  return payload.data;
+}
+
+function toCatalogGroups(groups) {
+  return (groups || []).map(group => ({
+    id: group.id,
+    label: group.name,
+    color: group.color,
+  }));
+}
+
+function toCatalogProjects(projects) {
+  return (projects || []).map(project => ({
+    id: project.id,
+    label: project.name,
+    group: project.groupId,
+    color: project.color,
+  }));
 }
 
 function setAuthError(message = '') {
@@ -144,6 +178,40 @@ function applyCurrentUser(user) {
   document.getElementById('sidebar-workspace-name').textContent = workspaceName;
 }
 
+function applyAccountPayload(account) {
+  if (!account) return;
+
+  state.profile = normalizeProfile({
+    ...state.profile,
+    ...(account.profile || {}),
+  });
+  state.settings = normalizeSettings({
+    ...state.settings,
+    ...(account.settings || {}),
+  });
+
+  if (currentUser) {
+    currentUser = {
+      ...currentUser,
+      email: state.profile.email || currentUser.email,
+      profile: {
+        ...(currentUser.profile || {}),
+        name: state.profile.name || '',
+        role: state.profile.role || '',
+        city: state.profile.city || '',
+        about: state.profile.about || '',
+        avatarUrl: account.profile?.avatarUrl || currentUser.profile?.avatarUrl || '',
+      },
+      workspace: {
+        ...(currentUser.workspace || {}),
+        ...(account.workspace || {}),
+        name: account.workspace?.name || currentUser.workspace?.name || '',
+      },
+    };
+    applyCurrentUser(currentUser);
+  }
+}
+
 async function fetchCurrentUserSession() {
   const response = await authFetch('/api/auth/me', {
     method: 'GET',
@@ -160,6 +228,20 @@ async function fetchCurrentUserSession() {
   }
 
   return payload.data;
+}
+
+async function fetchAccountFromServer() {
+  return apiJson('/api/account', {
+    method: 'GET',
+    headers: {},
+  });
+}
+
+async function syncAccountFromServer() {
+  const account = await fetchAccountFromServer();
+  applyAccountPayload(account);
+  save();
+  return account;
 }
 
 async function submitLogin(event) {
@@ -190,6 +272,9 @@ async function submitLogin(event) {
     }
 
     applyCurrentUser(user);
+    await syncCatalogFromServer();
+    await syncAccountFromServer();
+    state.currentView = state.settings.defaultView || 'graph';
     save();
     renderSidebarLists();
     renderCurrentView();
@@ -240,6 +325,9 @@ async function submitRegister(event) {
     }
 
     applyCurrentUser(user);
+    await syncCatalogFromServer();
+    await syncAccountFromServer();
+    state.currentView = state.settings.defaultView || 'graph';
     save();
     renderSidebarLists();
     renderCurrentView();
@@ -330,7 +418,6 @@ function normalizeAchievements(achievements, subs) {
   Object.entries(achievements || {}).forEach(([year, projects]) => {
     normalized[year] = {};
     Object.entries(projects || {}).forEach(([subId, items]) => {
-      if (!subs.some(sub => sub.id === subId)) return;
       normalized[year][subId] = (items || []).map(item => ({
         id: item.id || taskId(),
         text: item.text || '',
@@ -348,12 +435,12 @@ function normalizeAchievementProjects(achievementProjects, groups, subs, achieve
     normalized[year] = {};
     groups.forEach(group => {
       const groupProjectIds = subs.filter(sub => sub.group === group.id).map(sub => sub.id);
+      const achievementProjectIds = Object.keys(achievements?.[year] || {});
+      const validProjectIds = new Set([...groupProjectIds, ...achievementProjectIds]);
       const source = Array.isArray(achievementProjects?.[year]?.[group.id])
         ? achievementProjects[year][group.id]
-        : groupProjectIds;
-      const valid = source.filter(id => groupProjectIds.includes(id));
-      const missing = groupProjectIds.filter(id => !valid.includes(id));
-      normalized[year][group.id] = [...valid, ...missing];
+        : [];
+      normalized[year][group.id] = source.filter(id => validProjectIds.has(id));
     });
   });
   return normalized;
@@ -380,12 +467,28 @@ function normalizeTaskProjects(taskProjects, groups, subs) {
   const normalized = {};
   groups.forEach(group => {
     const groupProjectIds = subs.filter(sub => sub.group === group.id).map(sub => sub.id);
-    const source = Array.isArray(taskProjects?.[group.id]) ? taskProjects[group.id] : groupProjectIds;
-    const valid = source.filter(id => groupProjectIds.includes(id));
-    const missing = groupProjectIds.filter(id => !valid.includes(id));
-    normalized[group.id] = [...valid, ...missing];
+    const source = Array.isArray(taskProjects?.[group.id]) ? taskProjects[group.id] : [];
+    normalized[group.id] = source.filter(id => groupProjectIds.includes(id));
   });
   return normalized;
+}
+
+function buildInitialGroupProjectMap(groups, subs) {
+  const result = {};
+  groups.forEach(group => {
+    result[group.id] = subs.filter(sub => sub.group === group.id).map(sub => sub.id);
+  });
+  return result;
+}
+
+function buildInitialAchievementProjectMap(groups, subs, achievements) {
+  const years = Object.keys(achievements || {});
+  if (!years.length) years.push(String(new Date().getFullYear()));
+  const result = {};
+  years.forEach(year => {
+    result[year] = buildInitialGroupProjectMap(groups, subs);
+  });
+  return result;
 }
 
 function normalizeRecurring(items, subs) {
@@ -396,6 +499,238 @@ function normalizeRecurring(items, subs) {
     dayIdx: Number.isInteger(item.dayIdx) ? item.dayIdx : 0,
     text: item.text || '',
   })).filter(item => item.text.trim());
+}
+
+function normalizeKey(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function buildGroupIdMap(prevGroups, nextGroups) {
+  const map = {};
+  const nextById = new Set(nextGroups.map(group => group.id));
+  const nextByLabel = new Map(nextGroups.map(group => [normalizeKey(group.label), group.id]));
+
+  prevGroups.forEach(group => {
+    if (nextById.has(group.id)) {
+      map[group.id] = group.id;
+      return;
+    }
+    const mappedId = nextByLabel.get(normalizeKey(group.label));
+    if (mappedId) map[group.id] = mappedId;
+  });
+
+  return map;
+}
+
+function buildProjectIdMap(prevSubs, nextSubs, groupIdMap) {
+  const map = {};
+  const nextById = new Set(nextSubs.map(project => project.id));
+  const nextByComposite = new Map(
+    nextSubs.map(project => [`${normalizeKey(project.label)}::${project.group}`, project.id]),
+  );
+
+  prevSubs.forEach(project => {
+    if (nextById.has(project.id)) {
+      map[project.id] = project.id;
+      return;
+    }
+    const targetGroupId = groupIdMap[project.group] || project.group;
+    const mappedId = nextByComposite.get(`${normalizeKey(project.label)}::${targetGroupId}`);
+    if (mappedId) map[project.id] = mappedId;
+  });
+
+  return map;
+}
+
+function remapRecurringByProjectId(items, projectIdMap) {
+  return (items || [])
+    .map(item => ({
+      ...item,
+      subId: projectIdMap[item.subId] || item.subId,
+    }))
+    .filter(item => item.subId);
+}
+
+function remapNestedTaskMap(source, projectIdMap) {
+  const result = {};
+
+  Object.entries(source || {}).forEach(([outerKey, projects]) => {
+    result[outerKey] = {};
+    Object.entries(projects || {}).forEach(([projectId, value]) => {
+      const mappedProjectId = projectIdMap[projectId] || projectId;
+      result[outerKey][mappedProjectId] = structuredClone(value);
+    });
+  });
+
+  return result;
+}
+
+function remapProjectTaskMap(source, projectIdMap) {
+  const result = {};
+
+  Object.entries(source || {}).forEach(([projectId, value]) => {
+    const mappedProjectId = projectIdMap[projectId] || projectId;
+    result[mappedProjectId] = structuredClone(value);
+  });
+
+  return result;
+}
+
+function remapGroupProjectMap(source, groupIdMap, projectIdMap) {
+  const result = {};
+
+  Object.entries(source || {}).forEach(([groupId, projectIds]) => {
+    const mappedGroupId = groupIdMap[groupId] || groupId;
+    result[mappedGroupId] = (projectIds || []).map(projectId => projectIdMap[projectId] || projectId);
+  });
+
+  return result;
+}
+
+function remapAchievementProjectsMap(source, groupIdMap, projectIdMap) {
+  const result = {};
+
+  Object.entries(source || {}).forEach(([year, groups]) => {
+    result[year] = {};
+    Object.entries(groups || {}).forEach(([groupId, projectIds]) => {
+      const mappedGroupId = groupIdMap[groupId] || groupId;
+      result[year][mappedGroupId] = (projectIds || []).map(projectId => projectIdMap[projectId] || projectId);
+    });
+  });
+
+  return result;
+}
+
+function remapProjectTemplates(source, groupIdMap, projectIdMap) {
+  const result = {};
+
+  Object.entries(source || {}).forEach(([groupId, days]) => {
+    const mappedGroupId = groupIdMap[groupId] || groupId;
+    result[mappedGroupId] = {};
+    Object.entries(days || {}).forEach(([dayIdx, projectIds]) => {
+      result[mappedGroupId][dayIdx] = (projectIds || []).map(projectId => projectIdMap[projectId] || projectId);
+    });
+  });
+
+  return result;
+}
+
+function remapDayProjects(source, groupIdMap, projectIdMap) {
+  const result = {};
+
+  Object.entries(source || {}).forEach(([wk, groups]) => {
+    result[wk] = {};
+    Object.entries(groups || {}).forEach(([groupId, days]) => {
+      const mappedGroupId = groupIdMap[groupId] || groupId;
+      result[wk][mappedGroupId] = {};
+      Object.entries(days || {}).forEach(([dayIdx, projectIds]) => {
+        result[wk][mappedGroupId][dayIdx] = (projectIds || []).map(projectId => projectIdMap[projectId] || projectId);
+      });
+    });
+  });
+
+  return result;
+}
+
+function moveProjectBetweenGroupsInMapArray(container, fromGroupId, toGroupId, projectId) {
+  if (!container[fromGroupId]) return;
+  container[fromGroupId] = (container[fromGroupId] || []).filter(id => id !== projectId);
+  container[toGroupId] ||= [];
+  if (!container[toGroupId].includes(projectId)) {
+    container[toGroupId].push(projectId);
+  }
+}
+
+function reassignProjectGroupReferences(previousSubs, nextSubs, projectIdMap) {
+  const nextProjectsById = new Map(nextSubs.map(project => [project.id, project]));
+
+  previousSubs.forEach(project => {
+    const mappedProjectId = projectIdMap[project.id] || project.id;
+    const nextProject = nextProjectsById.get(mappedProjectId);
+    if (!nextProject || nextProject.group === project.group) return;
+
+    moveProjectBetweenGroupsInMapArray(state.taskProjects, project.group, nextProject.group, mappedProjectId);
+
+    const templateDaysToMove = DAYS
+      .map((_, dayIdx) => dayIdx)
+      .filter(dayIdx => (state.projectTemplates[project.group]?.[dayIdx] || []).includes(mappedProjectId));
+
+    templateDaysToMove.forEach(dayIdx => {
+      state.projectTemplates[project.group][dayIdx] =
+        (state.projectTemplates[project.group][dayIdx] || []).filter(id => id !== mappedProjectId);
+      state.projectTemplates[nextProject.group] ||= {};
+      state.projectTemplates[nextProject.group][dayIdx] ||= [];
+      if (!state.projectTemplates[nextProject.group][dayIdx].includes(mappedProjectId)) {
+        state.projectTemplates[nextProject.group][dayIdx].push(mappedProjectId);
+      }
+    });
+
+    Object.keys(state.dayProjects || {}).forEach(wk => {
+      DAYS.forEach((_, dayIdx) => {
+        const oldDayList = state.dayProjects[wk]?.[project.group]?.[dayIdx];
+        if (Array.isArray(oldDayList) && oldDayList.includes(mappedProjectId)) {
+          state.dayProjects[wk][project.group][dayIdx] = oldDayList.filter(id => id !== mappedProjectId);
+          state.dayProjects[wk][nextProject.group] ||= {};
+          state.dayProjects[wk][nextProject.group][dayIdx] ||= [];
+          if (!state.dayProjects[wk][nextProject.group][dayIdx].includes(mappedProjectId)) {
+            state.dayProjects[wk][nextProject.group][dayIdx].push(mappedProjectId);
+          }
+        }
+      });
+    });
+
+    Object.keys(state.achievementProjects || {}).forEach(year => {
+      const oldList = state.achievementProjects[year]?.[project.group];
+      if (Array.isArray(oldList) && oldList.includes(mappedProjectId)) {
+        state.achievementProjects[year][project.group] = oldList.filter(id => id !== mappedProjectId);
+        state.achievementProjects[year][nextProject.group] ||= [];
+        if (!state.achievementProjects[year][nextProject.group].includes(mappedProjectId)) {
+          state.achievementProjects[year][nextProject.group].push(mappedProjectId);
+        }
+      }
+    });
+  });
+}
+
+function applyCatalog(groups, subs) {
+  const previousGroups = structuredClone(state.groups || []);
+  const previousSubs = structuredClone(state.subs || []);
+  const groupIdMap = buildGroupIdMap(previousGroups, groups);
+  const projectIdMap = buildProjectIdMap(previousSubs, subs, groupIdMap);
+
+  state.recurring = remapRecurringByProjectId(state.recurring, projectIdMap);
+  state.backlog = remapProjectTaskMap(state.backlog, projectIdMap);
+  state.achievements = remapNestedTaskMap(state.achievements, projectIdMap);
+  state.taskProjects = remapGroupProjectMap(state.taskProjects, groupIdMap, projectIdMap);
+  state.achievementProjects = remapAchievementProjectsMap(state.achievementProjects, groupIdMap, projectIdMap);
+  state.data = remapNestedTaskMap(state.data, projectIdMap);
+  state.projectTemplates = remapProjectTemplates(state.projectTemplates, groupIdMap, projectIdMap);
+  state.dayProjects = remapDayProjects(state.dayProjects, groupIdMap, projectIdMap);
+
+  reassignProjectGroupReferences(
+    previousSubs.map(project => ({
+      ...project,
+      group: groupIdMap[project.group] || project.group,
+      id: projectIdMap[project.id] || project.id,
+    })),
+    subs,
+    projectIdMap,
+  );
+
+  state.groups = normalizeGroups(groups);
+  state.subs = normalizeSubs(subs, state.groups);
+  state.recurring = normalizeRecurring(state.recurring, state.subs);
+  state.backlog = normalizeBacklog(state.backlog);
+  state.achievements = normalizeAchievements(state.achievements, state.subs);
+  state.taskProjects = normalizeTaskProjects(state.taskProjects, state.groups, state.subs);
+  state.achievementProjects = normalizeAchievementProjects(
+    state.achievementProjects,
+    state.groups,
+    state.subs,
+    state.achievements,
+  );
+  ensureProjectTemplates();
+  state.dayProjects = normalizeDayProjects(state.dayProjects);
 }
 
 function weekKey(offset) {
@@ -435,6 +770,10 @@ function getSub(subId) {
   return state.subs.find(sub => sub.id === subId);
 }
 
+function getAnyProject(subId) {
+  return getSub(subId) || state.archivedCatalog.subs.find(sub => sub.id === subId);
+}
+
 function getCellForWeek(wk, subId, dayIdx) {
   if (!state.data[wk]) state.data[wk] = {};
   if (!state.data[wk][subId]) state.data[wk][subId] = {};
@@ -458,7 +797,7 @@ function getAchievementProjectsForGroup(year, groupId) {
     state.achievementProjects[year] = {};
   }
   if (!Array.isArray(state.achievementProjects[year][groupId])) {
-    state.achievementProjects[year][groupId] = [...getGroupProjectIds(groupId)];
+    state.achievementProjects[year][groupId] = [];
   }
   return state.achievementProjects[year][groupId];
 }
@@ -485,7 +824,7 @@ function getGroupProjectIds(groupId) {
 
 function getTaskProjectsForGroup(groupId) {
   if (!Array.isArray(state.taskProjects[groupId])) {
-    state.taskProjects[groupId] = [...getGroupProjectIds(groupId)];
+    state.taskProjects[groupId] = [];
   }
   return state.taskProjects[groupId];
 }
@@ -648,9 +987,18 @@ function load() {
       state.recurring = normalizeRecurring(raw.recurring, state.subs);
       state.recurringStatus = raw.recurringStatus || {};
       state.backlog = normalizeBacklog(raw.backlog);
-      state.taskProjects = normalizeTaskProjects(raw.taskProjects, state.groups, state.subs);
+      state.taskProjects = normalizeTaskProjects(
+        raw.taskProjects ?? buildInitialGroupProjectMap(state.groups, state.subs),
+        state.groups,
+        state.subs,
+      );
       state.achievements = normalizeAchievements(raw.achievements, state.subs);
-      state.achievementProjects = normalizeAchievementProjects(raw.achievementProjects, state.groups, state.subs, state.achievements);
+      state.achievementProjects = normalizeAchievementProjects(
+        raw.achievementProjects ?? buildInitialAchievementProjectMap(state.groups, state.subs, state.achievements),
+        state.groups,
+        state.subs,
+        state.achievements,
+      );
       state.profile = normalizeProfile(raw.profile);
       state.settings = normalizeSettings(raw.settings);
       state.data = normalizeData(raw.data);
@@ -676,9 +1024,14 @@ function load() {
   state.recurring = [];
   state.recurringStatus = {};
   state.backlog = {};
-  state.taskProjects = normalizeTaskProjects({}, state.groups, state.subs);
+  state.taskProjects = normalizeTaskProjects(buildInitialGroupProjectMap(state.groups, state.subs), state.groups, state.subs);
   state.achievements = {};
-  state.achievementProjects = normalizeAchievementProjects({}, state.groups, state.subs, state.achievements);
+  state.achievementProjects = normalizeAchievementProjects(
+    buildInitialAchievementProjectMap(state.groups, state.subs, state.achievements),
+    state.groups,
+    state.subs,
+    state.achievements,
+  );
   state.profile = normalizeProfile({});
   state.settings = normalizeSettings({});
   state.data = {};
@@ -687,6 +1040,81 @@ function load() {
   state.dayProjects = normalizeDayProjects({});
   state.dayColumnWidths = {};
   seedSample();
+}
+
+async function fetchCatalogFromServer() {
+  const data = await apiJson('/api/catalog', {
+    method: 'GET',
+    headers: {},
+  });
+
+  return {
+    groups: toCatalogGroups(data.groups),
+    subs: toCatalogProjects(data.projects),
+  };
+}
+
+async function fetchArchivedCatalogFromServer() {
+  const data = await apiJson('/api/catalog/archive', {
+    method: 'GET',
+    headers: {},
+  });
+
+  state.archivedCatalog = {
+    groups: toCatalogGroups(data.groups),
+    subs: toCatalogProjects(data.projects),
+  };
+
+  return state.archivedCatalog;
+}
+
+async function ensureDefaultCatalogOnServer() {
+  const existingCatalog = await fetchCatalogFromServer();
+  if (existingCatalog.groups.length || existingCatalog.subs.length) {
+    applyCatalog(existingCatalog.groups, existingCatalog.subs);
+    return existingCatalog;
+  }
+
+  const createdGroups = [];
+  for (const group of DEFAULT_GROUPS) {
+    const created = await apiJson('/api/catalog/groups', {
+      method: 'POST',
+      body: JSON.stringify({
+        name: group.label,
+        color: group.color,
+      }),
+    });
+    createdGroups.push(created);
+  }
+
+  const groupIdByLabel = new Map(createdGroups.map(group => [normalizeKey(group.name), group.id]));
+
+  for (const project of DEFAULT_SUBS) {
+    const sourceGroup = DEFAULT_GROUPS.find(group => group.id === project.group);
+    const groupId = sourceGroup ? groupIdByLabel.get(normalizeKey(sourceGroup.label)) : null;
+    if (!groupId) continue;
+
+    await apiJson('/api/catalog/projects', {
+      method: 'POST',
+      body: JSON.stringify({
+        groupId,
+        name: project.label,
+        color: project.color,
+      }),
+    });
+  }
+
+  const catalog = await fetchCatalogFromServer();
+  applyCatalog(catalog.groups, catalog.subs);
+  return catalog;
+}
+
+async function syncCatalogFromServer() {
+  const catalog = await ensureDefaultCatalogOnServer();
+  applyCatalog(catalog.groups, catalog.subs);
+  await fetchArchivedCatalogFromServer();
+  save();
+  return catalog;
 }
 
 function getDayColumnWidth(dayIdx) {
@@ -761,12 +1189,17 @@ function renderSidebarLists() {
   groupsWrap.innerHTML = `
     <button class="sidebar-inline-add" type="button" onclick="openGroupManage()">+ Добавить группу</button>
     ${state.groups.map(group => `
-    <div class="sidebar-item-row">
-      <button class="sidebar-item-main" type="button">
+    <div
+      class="sidebar-item-row"
+      draggable="true"
+      ondragstart="dragSidebarItem(event, 'group', '${group.id}')"
+      ondragover="allowSidebarItemDrop(event)"
+      ondrop="dropSidebarItem(event, 'group', '${group.id}')"
+    >
+      <button class="sidebar-item-main" type="button" onclick="openGroupManage('${group.id}')">
         <span class="sidebar-project-dot" style="background:${group.color}"></span>
         <span>${escapeHtml(group.label)}</span>
       </button>
-      <button class="sidebar-item-edit" type="button" onclick="openGroupManage('${group.id}')" title="Редактировать">✎</button>
     </div>
   `).join('')}`;
 
@@ -777,12 +1210,17 @@ function renderSidebarLists() {
   projectsWrap.innerHTML = `
     <button class="sidebar-inline-add" type="button" onclick="openManage()">+ Добавить проект</button>
     ${state.subs.map(project => `
-    <div class="sidebar-item-row">
-      <button class="sidebar-item-main" type="button">
+    <div
+      class="sidebar-item-row"
+      draggable="true"
+      ondragstart="dragSidebarItem(event, 'project', '${project.id}')"
+      ondragover="allowSidebarItemDrop(event)"
+      ondrop="dropSidebarItem(event, 'project', '${project.id}')"
+    >
+      <button class="sidebar-item-main" type="button" onclick="openManage('${project.id}')">
         <span class="sidebar-project-dot" style="background:${project.color}"></span>
         <span>${escapeHtml(project.label)}</span>
       </button>
-      <button class="sidebar-item-edit" type="button" onclick="openManage('${project.id}')" title="Редактировать">✎</button>
     </div>
   `).join('')}`;
 }
@@ -1055,7 +1493,7 @@ function renderWinsView() {
         </button>
         <div class="wins-year-body"${isOpen ? '' : ' style="display:none"'}">
           ${state.groups.map(group => {
-            const projects = getAchievementProjectsForGroup(year, group.id).map(getSub).filter(Boolean);
+            const projects = getAchievementProjectsForGroup(year, group.id).map(getAnyProject).filter(Boolean);
             return `
               <section class="wins-group-section">
                 <div class="wins-group-title" style="color:${group.color}">${escapeHtml(group.label)}</div>
@@ -1103,160 +1541,260 @@ function getProfileInitials() {
 }
 
 function renderProfileView() {
+  const archivedGroups = state.archivedCatalog.groups || [];
+  const archivedProjects = state.archivedCatalog.subs || [];
+
   document.getElementById('profile-view').innerHTML = `
-    <div class="settings-layout">
-      <section class="profile-card">
+    <div class="account-shell">
+      <section class="settings-card account-hero">
         <div class="profile-avatar">${escapeHtml(getProfileInitials())}</div>
-        <div class="profile-name">${escapeHtml(state.profile.name || 'Без имени')}</div>
-        <div class="profile-meta">${escapeHtml(state.profile.role || 'Роль не указана')}</div>
-        <div class="profile-meta">${escapeHtml(state.profile.city || 'Город не указан')}</div>
+        <div class="account-hero-copy">
+          <div class="profile-name">${escapeHtml(state.profile.name || 'Без имени')}</div>
+          <div class="profile-meta">${escapeHtml(state.profile.role || 'Роль не указана')}</div>
+          <div class="profile-meta">${escapeHtml(state.profile.city || 'Город не указан')}</div>
+          <div class="profile-meta">${escapeHtml(currentUser?.email || state.profile.email || 'Локальный профиль')}</div>
+        </div>
       </section>
-      <section class="settings-card">
-        <div class="settings-card-title">Личные данные</div>
-        <div class="settings-form">
-          <label class="field-group">
-            <span class="form-label">Имя</span>
-            <input id="profile-name" value="${escapeHtml(state.profile.name)}" />
-          </label>
-          <label class="field-group">
-            <span class="form-label">Email</span>
-            <input id="profile-email" value="${escapeHtml(state.profile.email)}" placeholder="name@email.com" />
-          </label>
-          <label class="field-group">
-            <span class="form-label">Роль</span>
-            <input id="profile-role" value="${escapeHtml(state.profile.role)}" placeholder="Основатель, менеджер..." />
-          </label>
-          <label class="field-group">
-            <span class="form-label">Город</span>
-            <input id="profile-city" value="${escapeHtml(state.profile.city)}" />
-          </label>
-          <label class="field-group">
-            <span class="form-label">О себе</span>
-            <textarea id="profile-about" placeholder="Короткое описание профиля для будущего кабинета и сервиса.">${escapeHtml(state.profile.about)}</textarea>
-          </label>
-          <div class="modal-actions modal-actions-right">
-            <button class="primary" type="button" onclick="saveProfile()">Сохранить профиль</button>
+
+      <div class="account-grid">
+        <section class="settings-card account-main">
+          <div class="settings-card-title">Личные данные</div>
+          <div class="settings-form settings-form-grid">
+            <label class="field-group">
+              <span class="form-label">Имя</span>
+              <input id="profile-name" value="${escapeHtml(state.profile.name)}" />
+            </label>
+            <label class="field-group">
+              <span class="form-label">Email</span>
+              <input id="profile-email" value="${escapeHtml(state.profile.email)}" placeholder="name@email.com" />
+            </label>
+            <label class="field-group">
+              <span class="form-label">Роль</span>
+              <input id="profile-role" value="${escapeHtml(state.profile.role)}" placeholder="Основатель, менеджер..." />
+            </label>
+            <label class="field-group">
+              <span class="form-label">Город</span>
+              <input id="profile-city" value="${escapeHtml(state.profile.city)}" />
+            </label>
+            <label class="field-group field-group-wide">
+              <span class="form-label">О себе</span>
+              <textarea id="profile-about" placeholder="Короткое описание профиля для будущего кабинета и сервиса.">${escapeHtml(state.profile.about)}</textarea>
+            </label>
+            <div class="modal-actions modal-actions-right field-group-wide">
+              <button class="primary" type="button" onclick="saveProfile()">Сохранить профиль</button>
+            </div>
           </div>
+        </section>
+
+        <div class="account-side">
+          <section class="settings-card">
+            <div class="settings-card-title">Статус аккаунта</div>
+            <div class="settings-info-row">
+              <span>Хранение данных</span>
+              <b>Локально + backend foundation</b>
+            </div>
+            <div class="settings-info-row">
+              <span>Авторизация</span>
+              <b>${currentUser ? 'Подключена' : 'Не активна'}</b>
+            </div>
+            <div class="settings-info-row">
+              <span>Синхронизация</span>
+              <b>Следующий этап после CRUD API</b>
+            </div>
+            <div class="settings-info-row">
+              <span>Аккаунт</span>
+              <b>${escapeHtml(currentUser?.email || state.profile.email || 'Локальный профиль')}</b>
+            </div>
+            <div class="modal-actions modal-actions-right">
+              <button type="button" onclick="logoutUser()">Выйти из аккаунта</button>
+            </div>
+          </section>
+
+          <section class="settings-card">
+            <div class="settings-card-title">Архив</div>
+            <div class="settings-copy">
+              Удалённые группы и проекты хранятся 30 дней. Здесь их можно вернуть обратно.
+            </div>
+            <div class="archive-block">
+              <div class="archive-subtitle">Группы</div>
+              ${archivedGroups.length ? archivedGroups.map(group => `
+                <div class="archive-row">
+                  <div class="archive-text">
+                    <span class="archive-name">${escapeHtml(group.label)}</span>
+                  </div>
+                  <button type="button" onclick="restoreArchivedGroup('${group.id}')">Восстановить</button>
+                </div>
+              `).join('') : '<div class="empty-note compact">Архивных групп пока нет.</div>'}
+            </div>
+            <div class="archive-block">
+              <div class="archive-subtitle">Проекты</div>
+              ${archivedProjects.length ? archivedProjects.map(project => `
+                <div class="archive-row">
+                  <div class="archive-text">
+                    <span class="archive-name">${escapeHtml(project.label)}</span>
+                  </div>
+                  <button type="button" onclick="restoreArchivedProject('${project.id}')">Восстановить</button>
+                </div>
+              `).join('') : '<div class="empty-note compact">Архивных проектов пока нет.</div>'}
+            </div>
+          </section>
         </div>
-      </section>
-      <section class="settings-card">
-        <div class="settings-card-title">Статус аккаунта</div>
-        <div class="settings-info-row">
-          <span>Хранение данных</span>
-          <b>Локально + backend foundation</b>
-        </div>
-        <div class="settings-info-row">
-          <span>Авторизация</span>
-          <b>${currentUser ? 'Подключена' : 'Не активна'}</b>
-        </div>
-        <div class="settings-info-row">
-          <span>Синхронизация</span>
-          <b>Следующий этап после CRUD API</b>
-        </div>
-        <div class="settings-info-row">
-          <span>Аккаунт</span>
-          <b>${escapeHtml(currentUser?.email || state.profile.email || 'Локальный профиль')}</b>
-        </div>
-        <div class="modal-actions modal-actions-right">
-          <button type="button" onclick="logoutUser()">Выйти из аккаунта</button>
-        </div>
-      </section>
+      </div>
     </div>
   `;
 }
 
 function renderSettingsView() {
   document.getElementById('settings-view').innerHTML = `
-    <div class="settings-layout">
-      <section class="settings-card">
-        <div class="settings-card-title">Сервис</div>
-        <div class="settings-form">
-          <label class="field-group">
-            <span class="form-label">Название пространства</span>
-            <input id="settings-workspace-name" value="${escapeHtml(state.settings.workspaceName)}" />
-          </label>
-          <label class="field-group">
-            <span class="form-label">Стартовая страница</span>
-            <select id="settings-default-view">
-              <option value="graph"${state.settings.defaultView === 'graph' ? ' selected' : ''}>График</option>
-              <option value="tasks"${state.settings.defaultView === 'tasks' ? ' selected' : ''}>Задачи</option>
-              <option value="wins"${state.settings.defaultView === 'wins' ? ' selected' : ''}>Достижения</option>
-              <option value="history"${state.settings.defaultView === 'history' ? ' selected' : ''}>История и аналитика</option>
-              <option value="profile"${state.settings.defaultView === 'profile' ? ' selected' : ''}>Профиль</option>
-              <option value="settings"${state.settings.defaultView === 'settings' ? ' selected' : ''}>Настройки</option>
-            </select>
-          </label>
-          <label class="settings-check">
-            <input id="settings-sidebar-collapsed" type="checkbox" ${state.settings.sidebarCollapsedOnStart ? 'checked' : ''} />
-            <span>Сворачивать sidebar при старте</span>
-          </label>
-          <label class="settings-check">
-            <input id="settings-open-current-year" type="checkbox" ${state.settings.openCurrentYearInAchievements ? 'checked' : ''} />
-            <span>Открывать достижения сразу на текущем году</span>
-          </label>
-          <div class="modal-actions modal-actions-right">
-            <button class="primary" type="button" onclick="saveSettings()">Сохранить настройки</button>
-          </div>
+    <div class="account-shell">
+      <section class="settings-card account-hero account-hero-settings">
+        <div class="account-hero-copy">
+          <div class="profile-name">Настройки сервиса</div>
+          <div class="profile-meta">Рабочее пространство, поведение интерфейса и резервные копии.</div>
         </div>
       </section>
-      <section class="settings-card">
-        <div class="settings-card-title">Данные</div>
-        <div class="settings-form">
-          <div class="settings-copy">
-            Здесь можно сохранить полную резервную копию сервиса или загрузить её обратно.
+
+      <div class="account-grid">
+        <section class="settings-card account-main">
+          <div class="settings-card-title">Сервис</div>
+          <div class="settings-form settings-form-grid">
+            <label class="field-group field-group-wide">
+              <span class="form-label">Название пространства</span>
+              <input id="settings-workspace-name" value="${escapeHtml(state.settings.workspaceName)}" />
+            </label>
+            <label class="field-group field-group-wide">
+              <span class="form-label">Стартовая страница</span>
+              <select id="settings-default-view">
+                <option value="graph"${state.settings.defaultView === 'graph' ? ' selected' : ''}>График</option>
+                <option value="tasks"${state.settings.defaultView === 'tasks' ? ' selected' : ''}>Задачи</option>
+                <option value="wins"${state.settings.defaultView === 'wins' ? ' selected' : ''}>Достижения</option>
+                <option value="history"${state.settings.defaultView === 'history' ? ' selected' : ''}>История и аналитика</option>
+                <option value="profile"${state.settings.defaultView === 'profile' ? ' selected' : ''}>Профиль</option>
+                <option value="settings"${state.settings.defaultView === 'settings' ? ' selected' : ''}>Настройки</option>
+              </select>
+            </label>
+            <label class="settings-check field-group-wide">
+              <input id="settings-sidebar-collapsed" type="checkbox" ${state.settings.sidebarCollapsedOnStart ? 'checked' : ''} />
+              <span>Сворачивать sidebar при старте</span>
+            </label>
+            <label class="settings-check field-group-wide">
+              <input id="settings-open-current-year" type="checkbox" ${state.settings.openCurrentYearInAchievements ? 'checked' : ''} />
+              <span>Открывать достижения сразу на текущем году</span>
+            </label>
+            <div class="modal-actions modal-actions-right field-group-wide">
+              <button class="primary" type="button" onclick="saveSettings()">Сохранить настройки</button>
+            </div>
           </div>
-          <div class="settings-actions-row">
-            <button type="button" onclick="exportAllData()">Экспорт JSON</button>
-            <button type="button" onclick="triggerImportData()">Импорт JSON</button>
-          </div>
-          <input id="settings-import-input" type="file" accept="application/json,.json" style="display:none" onchange="importAllDataFromFile(event)" />
+        </section>
+
+        <div class="account-side">
+          <section class="settings-card">
+            <div class="settings-card-title">Данные</div>
+            <div class="settings-copy">
+              Здесь можно сохранить полную резервную копию сервиса или загрузить её обратно.
+            </div>
+            <div class="settings-actions-row">
+              <button type="button" onclick="exportAllData()">Экспорт JSON</button>
+              <button type="button" onclick="triggerImportData()">Импорт JSON</button>
+            </div>
+            <input id="settings-import-input" type="file" accept="application/json,.json" style="display:none" onchange="importAllDataFromFile(event)" />
+          </section>
+
+          <section class="settings-card">
+            <div class="settings-card-title">Подготовка к серверной версии</div>
+            <div class="settings-info-row">
+              <span>Личный кабинет</span>
+              <b>Каркас готов</b>
+            </div>
+            <div class="settings-info-row">
+              <span>База данных</span>
+              <b>Следующий этап</b>
+            </div>
+            <div class="settings-info-row">
+              <span>Вход / авторизация</span>
+              <b>Нужно подключить</b>
+            </div>
+            <div class="settings-info-row">
+              <span>Профиль пользователя</span>
+              <b>Локальная версия уже есть</b>
+            </div>
+          </section>
         </div>
-      </section>
-      <section class="settings-card">
-        <div class="settings-card-title">Подготовка к серверной версии</div>
-        <div class="settings-info-row">
-          <span>Личный кабинет</span>
-          <b>Каркас готов</b>
-        </div>
-        <div class="settings-info-row">
-          <span>База данных</span>
-          <b>Следующий этап</b>
-        </div>
-        <div class="settings-info-row">
-          <span>Вход / авторизация</span>
-          <b>Нужно подключить</b>
-        </div>
-        <div class="settings-info-row">
-          <span>Профиль пользователя</span>
-          <b>Локальная версия уже есть</b>
-        </div>
-      </section>
+      </div>
     </div>
   `;
 }
 
-function saveProfile() {
-  state.profile = normalizeProfile({
-    name: document.getElementById('profile-name').value.trim(),
-    email: document.getElementById('profile-email').value.trim(),
-    role: document.getElementById('profile-role').value.trim(),
-    city: document.getElementById('profile-city').value.trim(),
-    about: document.getElementById('profile-about').value.trim(),
-  });
-  save();
-  renderProfileView();
+async function saveProfile() {
+  const button = document.querySelector('#profile-view .modal-actions .primary');
+  const originalText = button?.textContent || 'Сохранить профиль';
+
+  try {
+    if (button) {
+      button.disabled = true;
+      button.textContent = 'Сохраняем...';
+    }
+
+    const account = await apiJson('/api/account/profile', {
+      method: 'PATCH',
+      body: JSON.stringify({
+        name: document.getElementById('profile-name').value.trim(),
+        email: document.getElementById('profile-email').value.trim(),
+        role: document.getElementById('profile-role').value.trim(),
+        city: document.getElementById('profile-city').value.trim(),
+        about: document.getElementById('profile-about').value.trim(),
+      }),
+    });
+
+    applyAccountPayload(account);
+    save();
+    renderProfileView();
+  } catch (error) {
+    const code = error instanceof Error ? error.message : 'UPDATE_PROFILE_FAILED';
+    const message = code === 'EMAIL_ALREADY_IN_USE'
+      ? 'Эта почта уже занята другим аккаунтом.'
+      : 'Не удалось сохранить профиль.';
+    alert(message);
+  } finally {
+    if (button) {
+      button.disabled = false;
+      button.textContent = originalText;
+    }
+  }
 }
 
-function saveSettings() {
-  state.settings = normalizeSettings({
-    workspaceName: document.getElementById('settings-workspace-name').value.trim() || DEFAULT_SETTINGS.workspaceName,
-    defaultView: document.getElementById('settings-default-view').value,
-    sidebarCollapsedOnStart: document.getElementById('settings-sidebar-collapsed').checked,
-    openCurrentYearInAchievements: document.getElementById('settings-open-current-year').checked,
-  });
-  document.querySelector('.sidebar-title').textContent = state.settings.workspaceName;
-  save();
-  renderSettingsView();
+async function saveSettings() {
+  const button = document.querySelector('#settings-view .modal-actions .primary');
+  const originalText = button?.textContent || 'Сохранить настройки';
+
+  try {
+    if (button) {
+      button.disabled = true;
+      button.textContent = 'Сохраняем...';
+    }
+
+    const account = await apiJson('/api/account/settings', {
+      method: 'PATCH',
+      body: JSON.stringify({
+        workspaceName: document.getElementById('settings-workspace-name').value.trim() || DEFAULT_SETTINGS.workspaceName,
+        defaultView: document.getElementById('settings-default-view').value,
+        sidebarCollapsedOnStart: document.getElementById('settings-sidebar-collapsed').checked,
+        openCurrentYearInAchievements: document.getElementById('settings-open-current-year').checked,
+      }),
+    });
+
+    applyAccountPayload(account);
+    save();
+    renderSettingsView();
+  } catch (error) {
+    console.error(error);
+    alert('Не удалось сохранить настройки.');
+  } finally {
+    if (button) {
+      button.disabled = false;
+      button.textContent = originalText;
+    }
+  }
 }
 
 function buildExportPayload() {
@@ -1318,8 +1856,17 @@ async function importAllDataFromFile(event) {
     state.recurringStatus = raw.recurringStatus || {};
     state.backlog = normalizeBacklog(raw.backlog);
     state.achievements = normalizeAchievements(raw.achievements, state.subs);
-    state.taskProjects = normalizeTaskProjects(raw.taskProjects, state.groups, state.subs);
-    state.achievementProjects = normalizeAchievementProjects(raw.achievementProjects, state.groups, state.subs, state.achievements);
+    state.taskProjects = normalizeTaskProjects(
+      raw.taskProjects ?? buildInitialGroupProjectMap(state.groups, state.subs),
+      state.groups,
+      state.subs,
+    );
+    state.achievementProjects = normalizeAchievementProjects(
+      raw.achievementProjects ?? buildInitialAchievementProjectMap(state.groups, state.subs, state.achievements),
+      state.groups,
+      state.subs,
+      state.achievements,
+    );
     state.profile = normalizeProfile(raw.profile);
     state.settings = normalizeSettings(raw.settings);
     state.data = normalizeData(raw.data);
@@ -1353,9 +1900,18 @@ function toggleAchievementYear(year) {
 }
 
 function removeProjectFromWins(year, groupId, subId) {
-  state.achievementProjects[year][groupId] = getAchievementProjectsForGroup(year, groupId).filter(id => id !== subId);
-  save();
-  renderWinsView();
+  const project = getAnyProject(subId);
+  openConfirmModal({
+    title: 'Убрать проект',
+    message: `Убрать проект${project?.label ? ` «${project.label}»` : ''} со страницы достижений за ${year}?`,
+    confirmText: 'Убрать',
+    danger: true,
+    onConfirm: async () => {
+      state.achievementProjects[year][groupId] = getAchievementProjectsForGroup(year, groupId).filter(id => id !== subId);
+      save();
+      renderWinsView();
+    },
+  });
 }
 
 function openAchievementYearPrompt() {
@@ -1427,6 +1983,30 @@ function closeAchievementModal() {
   manageAchievementId = null;
 }
 
+function openConfirmModal({ title = 'Подтверждение', message = '', confirmText = 'Удалить', danger = true, onConfirm = null }) {
+  _confirmMeta = { onConfirm };
+  document.getElementById('confirm-modal-title').textContent = title;
+  document.getElementById('confirm-modal-copy').textContent = message;
+  const submitButton = document.getElementById('confirm-modal-submit');
+  submitButton.textContent = confirmText;
+  submitButton.classList.toggle('danger', Boolean(danger));
+  submitButton.classList.toggle('primary', !danger);
+  document.getElementById('confirm-modal').classList.add('open');
+}
+
+function closeConfirmModal() {
+  document.getElementById('confirm-modal').classList.remove('open');
+  _confirmMeta = null;
+}
+
+async function submitConfirmModal() {
+  const action = _confirmMeta?.onConfirm;
+  closeConfirmModal();
+  if (typeof action === 'function') {
+    await action();
+  }
+}
+
 function saveAchievement() {
   const year = document.getElementById('achievement-year-select').value;
   const subId = document.getElementById('achievement-project-select').value;
@@ -1457,10 +2037,18 @@ function deleteAchievement() {
   if (!manageAchievementId) return;
   const record = findAchievementRecord(manageAchievementId);
   if (!record) return;
-  state.achievements[record.year][record.subId] = getAchievementsForProject(record.year, record.subId).filter(item => item.id !== manageAchievementId);
-  save();
-  closeAchievementModal();
-  renderWinsView();
+  openConfirmModal({
+    title: 'Удалить достижение',
+    message: 'Удалить это достижение?',
+    confirmText: 'Удалить',
+    danger: true,
+    onConfirm: async () => {
+      state.achievements[record.year][record.subId] = getAchievementsForProject(record.year, record.subId).filter(item => item.id !== manageAchievementId);
+      save();
+      closeAchievementModal();
+      renderWinsView();
+    },
+  });
 }
 
 function changeWeek(delta) {
@@ -2184,6 +2772,13 @@ function closeSidebar() {
 
 function toggleSidebarSection(section) {
   const key = section === 'groups' ? 'groupsOpen' : 'projectsOpen';
+  if (state.ui.sidebarCollapsed) {
+    state.ui.sidebarCollapsed = false;
+    state.ui[key] = true;
+    save();
+    renderSidebarLists();
+    return;
+  }
   state.ui[key] = !state.ui[key];
   renderSidebarLists();
 }
@@ -2192,6 +2787,90 @@ function toggleSidebarCollapsed() {
   state.ui.sidebarCollapsed = !state.ui.sidebarCollapsed;
   save();
   renderSidebarLists();
+}
+
+function dragSidebarItem(event, type, id) {
+  _sidebarDragMeta = { type, id };
+  event.dataTransfer.effectAllowed = 'move';
+  event.dataTransfer.setData('application/x-sidebar-item', JSON.stringify({ type, id }));
+}
+
+function allowSidebarItemDrop(event) {
+  event.preventDefault();
+  event.dataTransfer.dropEffect = 'move';
+}
+
+function reorderCollectionById(collection, sourceId, targetId) {
+  const next = [...collection];
+  const sourceIndex = next.findIndex(item => item.id === sourceId);
+  const targetIndex = next.findIndex(item => item.id === targetId);
+  if (sourceIndex === -1 || targetIndex === -1 || sourceIndex === targetIndex) return null;
+  const [moved] = next.splice(sourceIndex, 1);
+  next.splice(targetIndex, 0, moved);
+  return next;
+}
+
+async function persistGroupSortOrder() {
+  await Promise.all(
+    state.groups.map((group, index) =>
+      apiJson(`/api/catalog/groups/${group.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ sortOrder: index }),
+      }),
+    ),
+  );
+}
+
+async function persistProjectSortOrder() {
+  await Promise.all(
+    state.subs.map((project, index) =>
+      apiJson(`/api/catalog/projects/${project.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ sortOrder: index }),
+      }),
+    ),
+  );
+}
+
+async function dropSidebarItem(event, type, targetId) {
+  event.preventDefault();
+  let payload = _sidebarDragMeta;
+  const raw = event.dataTransfer.getData('application/x-sidebar-item');
+  if (!payload && raw) {
+    try {
+      payload = JSON.parse(raw);
+    } catch {
+      payload = null;
+    }
+  }
+  _sidebarDragMeta = null;
+  if (!payload || payload.type !== type || payload.id === targetId) return;
+
+  try {
+    if (type === 'group') {
+      const nextGroups = reorderCollectionById(state.groups, payload.id, targetId);
+      if (!nextGroups) return;
+      state.groups = nextGroups;
+      renderSidebarLists();
+      await persistGroupSortOrder();
+      await syncCatalogFromServer();
+      renderCurrentView();
+      return;
+    }
+
+    const nextProjects = reorderCollectionById(state.subs, payload.id, targetId);
+    if (!nextProjects) return;
+    state.subs = nextProjects;
+    renderSidebarLists();
+    await persistProjectSortOrder();
+    await syncCatalogFromServer();
+    renderCurrentView();
+  } catch (error) {
+    console.error(error);
+    alert(type === 'group' ? 'Не удалось изменить порядок групп.' : 'Не удалось изменить порядок проектов.');
+    await syncCatalogFromServer();
+    renderCurrentView();
+  }
 }
 
 function openManage(projectId = null) {
@@ -2231,78 +2910,126 @@ function pickColor(color, el) {
   el.style.borderColor = '#1a1a18';
 }
 
-function saveProject() {
-  const name = document.getElementById('proj-name').value.trim();
-  newProjGroup = document.getElementById('proj-group-select').value;
-  if (!name) return;
-  if (manageProjectId) {
-    const project = getSub(manageProjectId);
-    if (!project) return;
-    const oldGroup = project.group;
-    project.label = name;
-    project.group = newProjGroup;
-    project.color = newProjColor;
-    if (oldGroup !== newProjGroup) {
-      state.taskProjects[oldGroup] = getTaskProjectsForGroup(oldGroup).filter(id => id !== project.id);
-      if (!getTaskProjectsForGroup(newProjGroup).includes(project.id)) {
-        getTaskProjectsForGroup(newProjGroup).push(project.id);
-      }
-      Object.keys(state.dayProjects).forEach(wk => {
-        DAYS.forEach((_, dayIdx) => {
-          state.dayProjects[wk][oldGroup][dayIdx] = getDayProjects(wk, oldGroup, dayIdx).filter(id => id !== project.id);
-          if (getCellForWeek(wk, project.id, dayIdx).length && !getDayProjects(wk, newProjGroup, dayIdx).includes(project.id)) {
-            getDayProjects(wk, newProjGroup, dayIdx).push(project.id);
-          }
-        });
-      });
-    }
-  } else {
-    const id = name.toLowerCase().replace(/[^a-zа-я0-9]/gi, '_') + '_' + Date.now();
-    const project = { id, label: name, group: newProjGroup, color: newProjColor };
-    state.subs.push(project);
-    getTaskProjectsForGroup(newProjGroup).push(id);
-    ensureProjectTemplates();
-  }
-  save();
-  closeManage();
-  renderCurrentView();
-}
-
-function deleteProject() {
-  if (!manageProjectId) return;
-  const removedRecurringIds = state.recurring.filter(item => item.subId === manageProjectId).map(item => item.id);
-  state.recurring = state.recurring.filter(item => item.subId !== manageProjectId);
+function removeProjectFromLocalState(projectId) {
+  const removedRecurringIds = state.recurring.filter(item => item.subId === projectId).map(item => item.id);
+  state.recurring = state.recurring.filter(item => item.subId !== projectId);
   Object.keys(state.recurringStatus).forEach(wk => {
     removedRecurringIds.forEach(id => {
       if (state.recurringStatus[wk]?.[id]) delete state.recurringStatus[wk][id];
     });
   });
   Object.keys(state.data).forEach(wk => {
-    delete state.data[wk][manageProjectId];
+    delete state.data[wk][projectId];
   });
-  delete state.backlog[manageProjectId];
+  delete state.backlog[projectId];
   Object.keys(state.dayProjects).forEach(wk => {
     state.groups.forEach(group => {
       DAYS.forEach((_, dayIdx) => {
-        state.dayProjects[wk][group.id][dayIdx] = getDayProjects(wk, group.id, dayIdx).filter(id => id !== manageProjectId);
+        state.dayProjects[wk][group.id][dayIdx] = getDayProjects(wk, group.id, dayIdx).filter(id => id !== projectId);
       });
     });
   });
-  state.subs = state.subs.filter(item => item.id !== manageProjectId);
+  state.subs = state.subs.filter(item => item.id !== projectId);
   Object.keys(state.taskProjects).forEach(groupId => {
-    state.taskProjects[groupId] = getTaskProjectsForGroup(groupId).filter(id => id !== manageProjectId);
-  });
-  Object.keys(state.achievements).forEach(year => {
-    if (state.achievements[year]?.[manageProjectId]) delete state.achievements[year][manageProjectId];
+    state.taskProjects[groupId] = getTaskProjectsForGroup(groupId).filter(id => id !== projectId);
   });
   Object.keys(state.projectTemplates).forEach(groupId => {
     DAYS.forEach((_, dayIdx) => {
-      state.projectTemplates[groupId][dayIdx] = (state.projectTemplates[groupId][dayIdx] || []).filter(id => id !== manageProjectId);
+      state.projectTemplates[groupId][dayIdx] = (state.projectTemplates[groupId][dayIdx] || []).filter(id => id !== projectId);
     });
   });
-  save();
-  closeManage();
-  renderCurrentView();
+}
+
+async function saveProject() {
+  const name = document.getElementById('proj-name').value.trim();
+  newProjGroup = document.getElementById('proj-group-select').value;
+  if (!name) return;
+
+  try {
+    if (manageProjectId) {
+      await apiJson(`/api/catalog/projects/${manageProjectId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          groupId: newProjGroup,
+          name,
+          color: newProjColor,
+        }),
+      });
+    } else {
+      await apiJson('/api/catalog/projects', {
+        method: 'POST',
+        body: JSON.stringify({
+          groupId: newProjGroup,
+          name,
+          color: newProjColor,
+        }),
+      });
+    }
+
+    await syncCatalogFromServer();
+    closeManage();
+    renderCurrentView();
+  } catch (error) {
+    console.error(error);
+    alert('Не удалось сохранить проект.');
+  }
+}
+
+async function deleteProject() {
+  if (!manageProjectId) return;
+  const project = getSub(manageProjectId);
+  openConfirmModal({
+    title: 'Удалить проект',
+    message: `Удалить проект${project?.label ? ` «${project.label}»` : ''}? Он уйдёт в архив на 30 дней.`,
+    confirmText: 'Удалить',
+    danger: true,
+    onConfirm: async () => {
+      try {
+        await apiJson(`/api/catalog/projects/${manageProjectId}`, {
+          method: 'DELETE',
+          headers: {},
+        });
+
+        removeProjectFromLocalState(manageProjectId);
+        await syncCatalogFromServer();
+        closeManage();
+        renderCurrentView();
+      } catch (error) {
+        console.error(error);
+        alert('Не удалось удалить проект.');
+      }
+    },
+  });
+}
+
+async function restoreArchivedGroup(groupId) {
+  try {
+    await apiJson(`/api/catalog/groups/${groupId}/restore`, {
+      method: 'POST',
+      body: JSON.stringify({}),
+    });
+
+    await syncCatalogFromServer();
+    renderCurrentView();
+  } catch (error) {
+    console.error(error);
+    alert('Не удалось восстановить группу.');
+  }
+}
+
+async function restoreArchivedProject(projectId) {
+  try {
+    await apiJson(`/api/catalog/projects/${projectId}/restore`, {
+      method: 'POST',
+      body: JSON.stringify({}),
+    });
+
+    await syncCatalogFromServer();
+    renderCurrentView();
+  } catch (error) {
+    console.error(error);
+    alert('Не удалось восстановить проект.');
+  }
 }
 
 function openGroupManage(groupId = null) {
@@ -2328,45 +3055,62 @@ function pickGroupColor(color, el) {
   el.style.borderColor = '#1a1a18';
 }
 
-function saveGroup() {
+async function saveGroup() {
   const name = document.getElementById('group-name').value.trim();
   if (!name) return;
-  if (manageGroupId) {
-    const group = getGroup(manageGroupId);
-    if (!group) return;
-    group.label = name;
-    group.color = newGroupColor;
-  } else {
-    const id = name.toLowerCase().replace(/[^a-zа-я0-9]/gi, '_') + '_' + Date.now();
-    state.groups.push({ id, label: name, color: newGroupColor });
-    state.taskProjects[id] = [];
-    state.projectTemplates[id] = Object.fromEntries(DAYS.map((_, dayIdx) => [dayIdx, []]));
-    Object.keys(state.dayProjects).forEach(wk => ensureDayProjectsWeek(wk));
+
+  try {
+    if (manageGroupId) {
+      await apiJson(`/api/catalog/groups/${manageGroupId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          name,
+          color: newGroupColor,
+        }),
+      });
+    } else {
+      await apiJson('/api/catalog/groups', {
+        method: 'POST',
+        body: JSON.stringify({
+          name,
+          color: newGroupColor,
+        }),
+      });
+    }
+
+    await syncCatalogFromServer();
+    closeGroupManage();
+    renderCurrentView();
+  } catch (error) {
+    console.error(error);
+    alert('Не удалось сохранить группу.');
   }
-  save();
-  closeGroupManage();
-  renderCurrentView();
 }
 
-function deleteGroup() {
+async function deleteGroup() {
   if (!manageGroupId) return;
-  if (state.groups.length <= 1) {
-    alert('Нужна хотя бы одна группа.');
-    return;
-  }
-  if (state.subs.some(project => project.group === manageGroupId)) {
-    alert('Сначала перенеси или удали проекты из этой группы.');
-    return;
-  }
-  state.groups = state.groups.filter(group => group.id !== manageGroupId);
-  delete state.taskProjects[manageGroupId];
-  delete state.projectTemplates[manageGroupId];
-  Object.keys(state.dayProjects).forEach(wk => {
-    if (state.dayProjects[wk][manageGroupId]) delete state.dayProjects[wk][manageGroupId];
+  const group = getGroup(manageGroupId);
+  openConfirmModal({
+    title: 'Удалить группу',
+    message: `Удалить группу${group?.label ? ` «${group.label}»` : ''}? Она уйдёт в архив на 30 дней, а проекты попадут в «Без группы».`,
+    confirmText: 'Удалить',
+    danger: true,
+    onConfirm: async () => {
+      try {
+        await apiJson(`/api/catalog/groups/${manageGroupId}`, {
+          method: 'DELETE',
+          headers: {},
+        });
+
+        await syncCatalogFromServer();
+        closeGroupManage();
+        renderCurrentView();
+      } catch (error) {
+        console.error(error);
+        alert('Не удалось удалить группу.');
+      }
+    },
   });
-  save();
-  closeGroupManage();
-  renderCurrentView();
 }
 
 function startDayResize(event, dayIdx) {
@@ -2522,6 +3266,7 @@ function handleModalBackdrop(event, type) {
   if (type === 'group') closeGroupManage();
   if (type === 'recurring') closeRecurringManage();
   if (type === 'achievement') closeAchievementModal();
+  if (type === 'confirm') closeConfirmModal();
 }
 
 async function analyzeAI() {
@@ -2609,6 +3354,9 @@ async function initApp() {
     }
 
     applyCurrentUser(user);
+    await syncCatalogFromServer();
+    await syncAccountFromServer();
+    state.currentView = state.settings.defaultView || state.currentView;
     renderSidebarLists();
     renderCurrentView();
     showAppShell();

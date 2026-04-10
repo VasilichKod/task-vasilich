@@ -4,11 +4,19 @@ import { fileURLToPath } from 'node:url';
 
 import { handleWorkspaceBootstrapRequest } from '../api/bootstrap/index.js';
 import {
+  handleGetAccountRequest,
+  handleUpdateProfileRequest,
+  handleUpdateSettingsRequest,
+} from '../api/account/index.js';
+import {
   handleArchiveGroupRequest,
   handleArchiveProjectRequest,
   handleCreateGroupRequest,
   handleCreateProjectRequest,
+  handleGetArchivedCatalogRequest,
   handleGetCatalogRequest,
+  handleRestoreGroupRequest,
+  handleRestoreProjectRequest,
   handleUpdateGroupRequest,
   handleUpdateProjectRequest,
 } from '../api/catalog/index.js';
@@ -71,7 +79,7 @@ function withCors(request: Request, response: Response) {
   headers.set('access-control-allow-origin', allowOrigin);
   headers.set('access-control-allow-credentials', 'true');
   headers.set('access-control-allow-headers', 'content-type');
-  headers.set('access-control-allow-methods', 'GET,POST,OPTIONS');
+  headers.set('access-control-allow-methods', 'GET,POST,PATCH,DELETE,OPTIONS');
 
   return new Response(response.body, {
     status: response.status,
@@ -119,8 +127,24 @@ async function route(request: Request) {
     return withCors(request, await handleWorkspaceBootstrapRequest(request));
   }
 
+  if (request.method === 'GET' && url.pathname === '/api/account') {
+    return withCors(request, await handleGetAccountRequest(request));
+  }
+
+  if (request.method === 'PATCH' && url.pathname === '/api/account/profile') {
+    return withCors(request, await handleUpdateProfileRequest(request));
+  }
+
+  if (request.method === 'PATCH' && url.pathname === '/api/account/settings') {
+    return withCors(request, await handleUpdateSettingsRequest(request));
+  }
+
   if (request.method === 'GET' && url.pathname === '/api/catalog') {
     return withCors(request, await handleGetCatalogRequest(request));
+  }
+
+  if (request.method === 'GET' && url.pathname === '/api/catalog/archive') {
+    return withCors(request, await handleGetArchivedCatalogRequest(request));
   }
 
   if (request.method === 'POST' && url.pathname === '/api/catalog/groups') {
@@ -137,6 +161,11 @@ async function route(request: Request) {
     return withCors(request, await handleArchiveGroupRequest(request, groupId));
   }
 
+  if (request.method === 'POST' && url.pathname.startsWith('/api/catalog/groups/') && url.pathname.endsWith('/restore')) {
+    const groupId = url.pathname.slice('/api/catalog/groups/'.length, -'/restore'.length);
+    return withCors(request, await handleRestoreGroupRequest(request, groupId));
+  }
+
   if (request.method === 'POST' && url.pathname === '/api/catalog/projects') {
     return withCors(request, await handleCreateProjectRequest(request));
   }
@@ -149,6 +178,11 @@ async function route(request: Request) {
   if (request.method === 'DELETE' && url.pathname.startsWith('/api/catalog/projects/')) {
     const projectId = url.pathname.slice('/api/catalog/projects/'.length);
     return withCors(request, await handleArchiveProjectRequest(request, projectId));
+  }
+
+  if (request.method === 'POST' && url.pathname.startsWith('/api/catalog/projects/') && url.pathname.endsWith('/restore')) {
+    const projectId = url.pathname.slice('/api/catalog/projects/'.length, -'/restore'.length);
+    return withCors(request, await handleRestoreProjectRequest(request, projectId));
   }
 
   return withCors(request, notFound());
