@@ -5,8 +5,10 @@
   "type": "module",
   "scripts": {
     "dev:server": "tsx src/server/http/dev-server.ts",
+    "start:server": "tsx src/server/http/dev-server.ts",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
+    "prisma:migrate:deploy": "prisma migrate deploy",
     "prisma:push": "prisma db push",
     "prisma:studio": "prisma studio",
     "typecheck": "tsc --noEmit"

@@ -1,0 +1,18 @@
+[Unit]
+Description=Task Vasilich V3 backend
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=simple
+User=deploy
+WorkingDirectory=/var/www/task-vasilich/V3
+EnvironmentFile=/var/www/task-vasilich/V3/.env
+ExecStart=/usr/bin/npm run start:server
+Restart=always
+RestartSec=3
+KillSignal=SIGINT
+TimeoutStopSec=15
+
+[Install]
+WantedBy=multi-user.target

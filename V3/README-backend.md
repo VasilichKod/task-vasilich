@@ -31,6 +31,14 @@
 7. Запустить локальный backend:
    `npm run dev:server`
 
+## Production
+
+- prod env шаблон: [deploy/.env.production.example](./deploy/.env.production.example)
+- unit-файл: [deploy/task-vasilich-v3.service](./deploy/task-vasilich-v3.service)
+- пошаговый VPS deploy: [deploy/DEPLOY-VPS.md](./deploy/DEPLOY-VPS.md)
+
+Для VPS принят вариант запуска через `systemd`, не через `pm2`.
+
 ## Следующий кодовый этап
 
 - подключение auth routes к framework
