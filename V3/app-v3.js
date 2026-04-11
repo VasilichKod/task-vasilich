@@ -85,6 +85,7 @@ let _achievementsSyncTimer = null;
 let _lastAchievementsSyncSignature = '';
 let _isApplyingServerAchievements = false;
 let _hasPersistedLocalWorkspace = false;
+let _graphTouchPan = null;
 
 const DEFAULT_PROFILE = {
   name: 'Степан',
@@ -110,6 +111,76 @@ function authFetch(path, options = {}) {
       ...(options.headers || {}),
     },
   });
+}
+
+function getGraphScroller() {
+  return document.getElementById('graph-view');
+}
+
+function canPanGraphFromPage() {
+  const scroller = getGraphScroller();
+  return state.currentView === 'graph' && scroller && scroller.scrollWidth > scroller.clientWidth + 4;
+}
+
+function shouldIgnoreGraphPanTarget(target) {
+  if (!(target instanceof Element)) return false;
+  return Boolean(target.closest('button, input, textarea, select, .modal, .sidebar, .mobile-nav'));
+}
+
+function handleGraphPageWheel(event) {
+  if (!canPanGraphFromPage() || shouldIgnoreGraphPanTarget(event.target)) return;
+
+  const scroller = getGraphScroller();
+  if (!scroller) return;
+
+  const delta = Math.abs(event.deltaX) > 0 ? event.deltaX : (event.shiftKey ? event.deltaY : 0);
+  if (!delta) return;
+
+  scroller.scrollLeft += delta;
+  event.preventDefault();
+}
+
+function handleGraphTouchStart(event) {
+  if (!canPanGraphFromPage() || shouldIgnoreGraphPanTarget(event.target) || event.touches.length !== 1) {
+    _graphTouchPan = null;
+    return;
+  }
+
+  const touch = event.touches[0];
+  _graphTouchPan = {
+    startX: touch.clientX,
+    startY: touch.clientY,
+    horizontal: false,
+  };
+}
+
+function handleGraphTouchMove(event) {
+  if (!canPanGraphFromPage() || !_graphTouchPan || event.touches.length !== 1) return;
+
+  const scroller = getGraphScroller();
+  if (!scroller) return;
+
+  const touch = event.touches[0];
+  const deltaX = touch.clientX - _graphTouchPan.startX;
+  const deltaY = touch.clientY - _graphTouchPan.startY;
+
+  if (!_graphTouchPan.horizontal) {
+    if (Math.abs(deltaX) <= 6) return;
+    if (Math.abs(deltaX) <= Math.abs(deltaY)) {
+      _graphTouchPan = null;
+      return;
+    }
+    _graphTouchPan.horizontal = true;
+  }
+
+  scroller.scrollLeft -= deltaX;
+  _graphTouchPan.startX = touch.clientX;
+  _graphTouchPan.startY = touch.clientY;
+  event.preventDefault();
+}
+
+function handleGraphTouchEnd() {
+  _graphTouchPan = null;
 }
 
 async function apiJson(path, options = {}) {
@@ -353,7 +424,7 @@ function applyPlanningPayload(payload) {
     );
     state.data = normalizeData(payload?.data);
     state.projectTemplates = payload?.projectTemplates || {};
-    ensureProjectTemplates();
+    ensureProjectTemplates(false);
     state.dayProjects = normalizeDayProjects(payload?.dayProjects);
     _lastPlanningSyncSignature = getPlanningSyncSignature();
   } finally {
@@ -656,7 +727,7 @@ function normalizeAchievementYears(achievementYears, achievements, achievementPr
 
   return Array.from(years)
     .filter(year => /^\d{4}$/.test(String(year)))
-    .sort((a, b) => Number(b) - Number(a));
+    .sort((a, b) => Number(a) - Number(b));
 }
 
 function normalizeAchievementProjects(achievementProjects, groups, subs, achievements, achievementYears = []) {
@@ -966,7 +1037,7 @@ function applyCatalog(groups, subs) {
     state.achievements,
     state.achievementYears,
   );
-  ensureProjectTemplates();
+  ensureProjectTemplates(false);
   state.dayProjects = normalizeDayProjects(state.dayProjects);
 }
 
@@ -1066,12 +1137,14 @@ function getTaskProjectsForGroup(groupId) {
   return state.taskProjects[groupId];
 }
 
-function ensureProjectTemplates() {
+function ensureProjectTemplates(fillMissingWithDefaults = true) {
   state.groups.forEach(group => {
     if (!state.projectTemplates[group.id]) state.projectTemplates[group.id] = {};
     DAYS.forEach((_, dayIdx) => {
       if (!Array.isArray(state.projectTemplates[group.id][dayIdx])) {
-        state.projectTemplates[group.id][dayIdx] = [...getGroupProjectIds(group.id)];
+        state.projectTemplates[group.id][dayIdx] = fillMissingWithDefaults
+          ? [...getGroupProjectIds(group.id)]
+          : [];
       } else {
         const valid = new Set(getGroupProjectIds(group.id));
         state.projectTemplates[group.id][dayIdx] = state.projectTemplates[group.id][dayIdx].filter(id => valid.has(id));
@@ -1082,7 +1155,7 @@ function ensureProjectTemplates() {
 
 function ensureDayProjectsWeek(wk, store = state.dayProjects) {
   if (!store[wk]) store[wk] = {};
-  ensureProjectTemplates();
+  ensureProjectTemplates(false);
   state.groups.forEach(group => {
     if (!store[wk][group.id]) store[wk][group.id] = {};
     DAYS.forEach((_, dayIdx) => {
@@ -1250,7 +1323,7 @@ function load() {
       state.settings = normalizeSettings(raw.settings);
       state.data = normalizeData(raw.data);
       state.projectTemplates = raw.projectTemplates || {};
-      ensureProjectTemplates();
+      ensureProjectTemplates(false);
       state.dayProjects = normalizeDayProjects(raw.dayProjects);
       state.dayColumnWidths = raw.dayColumnWidths || {};
       state.ui.sidebarCollapsed = raw.sidebarCollapsed === undefined
@@ -1428,8 +1501,15 @@ function renderSidebarLists() {
   document.querySelector('.sidebar-title').textContent = state.settings.workspaceName || DEFAULT_SETTINGS.workspaceName;
   document.getElementById('sidebar-workspace-name').textContent = state.settings.workspaceName || DEFAULT_SETTINGS.workspaceName;
   const collapseButton = document.querySelector('.sidebar-collapse-btn');
+  const collapseGlyph = document.querySelector('.sidebar-collapse-glyph');
+  const mobileMode = isMobileViewport();
   collapseButton.classList.toggle('collapsed', state.ui.sidebarCollapsed);
-  collapseButton.title = state.ui.sidebarCollapsed ? 'Развернуть меню' : 'Свернуть меню';
+  collapseButton.title = mobileMode
+    ? 'Закрыть меню'
+    : (state.ui.sidebarCollapsed ? 'Развернуть меню' : 'Свернуть меню');
+  if (collapseGlyph) {
+    collapseGlyph.textContent = mobileMode ? '×' : '‹';
+  }
   document.querySelectorAll('[data-view]').forEach(button => {
     button.classList.toggle('active', button.dataset.view === state.currentView);
   });
@@ -1506,7 +1586,11 @@ function renderCurrentView() {
     createBtn.textContent = '+ задача';
     createBtn.onclick = () => openCreateTaskModal('week');
     addProjectBtn.style.display = 'inline-flex';
+    addProjectBtn.textContent = '+ проект';
+    addProjectBtn.onclick = () => openDayProjectModal();
     carryBtn.style.display = 'inline-flex';
+    carryBtn.textContent = 'перенос';
+    carryBtn.onclick = () => carryOverUnfinished();
     renderBoard();
     return;
   }
@@ -2129,7 +2213,7 @@ async function importAllDataFromFile(event) {
     state.settings = normalizeSettings(raw.settings);
     state.data = normalizeData(raw.data);
     state.projectTemplates = raw.projectTemplates || {};
-    ensureProjectTemplates();
+    ensureProjectTemplates(false);
     state.dayProjects = normalizeDayProjects(raw.dayProjects);
     state.dayColumnWidths = raw.dayColumnWidths || {};
     state.ui.sidebarCollapsed = raw.sidebarCollapsed === undefined
@@ -2830,7 +2914,7 @@ function carryOverUnfinished() {
 }
 
 function renderProjectTemplateBoard() {
-  ensureProjectTemplates();
+  ensureProjectTemplates(false);
   const html = state.groups.map(group => `
     <div class="project-template-group">
       <div class="project-template-group-title">
@@ -2880,7 +2964,7 @@ function closeProjectTemplateManage() {
 }
 
 function toggleProjectTemplate(groupId, dayIdx, subId, checked) {
-  ensureProjectTemplates();
+  ensureProjectTemplates(false);
   const list = state.projectTemplates[groupId][dayIdx];
   if (checked && !list.includes(subId)) list.push(subId);
   if (!checked) state.projectTemplates[groupId][dayIdx] = list.filter(id => id !== subId);
@@ -2889,7 +2973,7 @@ function toggleProjectTemplate(groupId, dayIdx, subId, checked) {
 }
 
 function setProjectTemplateDays(groupId, subId, enabled) {
-  ensureProjectTemplates();
+  ensureProjectTemplates(false);
   DAYS.forEach((_, dayIdx) => {
     const list = state.projectTemplates[groupId][dayIdx];
     if (enabled) {
@@ -2903,7 +2987,7 @@ function setProjectTemplateDays(groupId, subId, enabled) {
 }
 
 function setGroupProjectTemplate(groupId, enabled) {
-  ensureProjectTemplates();
+  ensureProjectTemplates(false);
   const projectIds = state.subs.filter(sub => sub.group === groupId).map(sub => sub.id);
   DAYS.forEach((_, dayIdx) => {
     state.projectTemplates[groupId][dayIdx] = enabled ? [...projectIds] : [];
@@ -3005,7 +3089,8 @@ function saveRecurring() {
   save();
   renderCurrentView();
   renderRecurringList();
-  startRecurringEdit(manageRecurringId);
+  manageRecurringId = null;
+  startRecurringEdit();
 }
 
 function deleteRecurring() {
@@ -3047,9 +3132,25 @@ function toggleSidebarSection(section) {
 }
 
 function toggleSidebarCollapsed() {
+  if (isMobileViewport()) {
+    closeSidebar();
+    return;
+  }
   state.ui.sidebarCollapsed = !state.ui.sidebarCollapsed;
   save();
   renderSidebarLists();
+}
+
+function handleSidebarPrimaryButton() {
+  if (isMobileViewport()) {
+    closeSidebar();
+    return;
+  }
+  toggleSidebarCollapsed();
+}
+
+function isMobileViewport() {
+  return window.matchMedia('(max-width: 768px)').matches;
 }
 
 function dragSidebarItem(event, type, id) {
@@ -3583,6 +3684,15 @@ async function analyzeAI() {
 }
 
 function bindStaticUI() {
+  const mainContent = document.querySelector('.main-content');
+  if (mainContent) {
+    mainContent.addEventListener('wheel', handleGraphPageWheel, { passive: false });
+    mainContent.addEventListener('touchstart', handleGraphTouchStart, { passive: true });
+    mainContent.addEventListener('touchmove', handleGraphTouchMove, { passive: false });
+    mainContent.addEventListener('touchend', handleGraphTouchEnd, { passive: true });
+    mainContent.addEventListener('touchcancel', handleGraphTouchEnd, { passive: true });
+  }
+
   document.getElementById('task-day-select').innerHTML = DAYS.map((day, index) => `<option value="${index}">${day}</option>`).join('');
   document.getElementById('create-task-group-select').addEventListener('change', renderCreateTaskOptions);
   document.getElementById('create-task-day-select').addEventListener('change', renderCreateTaskOptions);
