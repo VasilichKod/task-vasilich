@@ -1608,6 +1608,18 @@ async function ensureDefaultCatalogOnServer() {
     createdGroups.push(created);
   }
 
+  // Создать один дефолтный проект в первой группе
+  if (createdGroups.length) {
+    await apiJson('/api/catalog/projects', {
+      method: 'POST',
+      body: JSON.stringify({
+        groupId: createdGroups[0].id,
+        name: 'Проект',
+        color: COLORS[0],
+      }),
+    });
+  }
+
   const catalog = await fetchCatalogFromServer();
   applyCatalog(catalog.groups, catalog.subs);
   return catalog;
