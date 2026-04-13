@@ -243,6 +243,7 @@ export async function getWorkspaceBootstrap(input: WorkspaceBootstrapInput) {
         id: true,
         name: true,
         slug: true,
+        planningVersion: true,
       },
     }),
     prisma.profile.findUnique({
@@ -395,6 +396,7 @@ export async function getWorkspaceBootstrap(input: WorkspaceBootstrapInput) {
       name: workspace.name,
       slug: workspace.slug,
       role: membership.role,
+      planningVersion: workspace.planningVersion,
     },
     profile: {
       name: profile?.name ?? '',

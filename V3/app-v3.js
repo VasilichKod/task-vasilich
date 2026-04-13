@@ -82,6 +82,7 @@ let _planningSyncTimer = null;
 let _lastPlanningSyncSignature = '';
 let _isApplyingServerPlanning = false;
 let _serverPlanningBase = null;
+let _planningVersion = 0;
 let _achievementsSyncTimer = null;
 let _lastAchievementsSyncSignature = '';
 let _isApplyingServerAchievements = false;
@@ -487,9 +488,10 @@ function buildNormalizedPlanningSnapshot(payload = {}) {
 
 function mergeLeafRecord(base = {}, local = {}, latest = {}) {
   const result = {};
+  const localKeys = new Set(Object.keys(local || {}));
   const keys = new Set([
     ...Object.keys(base || {}),
-    ...Object.keys(local || {}),
+    ...localKeys,
     ...Object.keys(latest || {}),
   ]);
 
@@ -497,10 +499,17 @@ function mergeLeafRecord(base = {}, local = {}, latest = {}) {
     const baseValue = base?.[key];
     const localValue = local?.[key];
     const latestValue = latest?.[key];
-    const chosenValue = isJsonEqual(localValue, baseValue) ? latestValue : localValue;
 
-    if (!isEmptyCollection(chosenValue)) {
-      result[key] = cloneJson(chosenValue);
+    if (isJsonEqual(localValue, baseValue)) {
+      // Локально не менялось — берём серверное значение
+      if (latestValue !== undefined) {
+        result[key] = cloneJson(latestValue);
+      }
+    } else {
+      // Локально изменилось — берём локальное (включая пустые массивы = удаление)
+      if (localValue !== undefined) {
+        result[key] = cloneJson(localValue);
+      }
     }
   }
 
@@ -513,9 +522,10 @@ function mergeNestedRecord(base = {}, local = {}, latest = {}, depth = 1) {
   }
 
   const result = {};
+  const localKeys = new Set(Object.keys(local || {}));
   const keys = new Set([
     ...Object.keys(base || {}),
-    ...Object.keys(local || {}),
+    ...localKeys,
     ...Object.keys(latest || {}),
   ]);
 
@@ -525,20 +535,25 @@ function mergeNestedRecord(base = {}, local = {}, latest = {}, depth = 1) {
     const latestValue = latest?.[key];
 
     if (isJsonEqual(localValue, baseValue)) {
-      if (!isEmptyCollection(latestValue)) {
+      // Локально не менялось — берём серверное
+      if (latestValue !== undefined) {
         result[key] = cloneJson(latestValue);
       }
       continue;
     }
 
-    if (isEmptyCollection(localValue)) {
+    // Локально изменилось: если пустой объект/массив — это явное удаление
+    if (isEmptyCollection(localValue) && localKeys.has(key)) {
+      result[key] = cloneJson(localValue);
+      continue;
+    }
+
+    if (localValue === undefined) {
       continue;
     }
 
     const mergedValue = mergeNestedRecord(baseValue || {}, localValue || {}, latestValue || {}, depth - 1);
-    if (!isEmptyCollection(mergedValue)) {
-      result[key] = mergedValue;
-    }
+    result[key] = mergedValue;
   }
 
   return result;
@@ -616,7 +631,7 @@ function isServerAchievementsEmpty(payload) {
   );
 }
 
-function applyPlanningPayload(payload) {
+function applyPlanningPayload(payload, version) {
   const normalizedPayload = buildNormalizedPlanningSnapshot(payload);
   _isApplyingServerPlanning = true;
   try {
@@ -630,6 +645,9 @@ function applyPlanningPayload(payload) {
     state.dayProjects = normalizedPayload.dayProjects;
     _serverPlanningBase = cloneJson(normalizedPayload);
     _lastPlanningSyncSignature = getPlanningSyncSignature();
+    if (version !== undefined) {
+      _planningVersion = version;
+    }
   } finally {
     _isApplyingServerPlanning = false;
   }
@@ -665,7 +683,7 @@ async function syncPlanningFromServer() {
   if (shouldSeedPlanningFromLocal) {
     await syncPlanningStateToServer();
   } else {
-    applyPlanningPayload(payload);
+    applyPlanningPayload(payload, payload?.workspace?.planningVersion ?? 0);
   }
 
   if (shouldSeedAchievementsFromLocal) {
@@ -684,15 +702,20 @@ async function syncPlanningStateToServer() {
   const signature = getPlanningSyncSignature();
   if (signature === _lastPlanningSyncSignature) return;
 
-  const latestServerPayload = buildNormalizedPlanningSnapshot(await fetchBootstrapFromServer());
-  const mergedPayload = mergePlanningPayload(buildNormalizedPlanningSnapshot(buildPlanningPayload()), latestServerPayload);
+  const payload = buildPlanningPayload();
+  payload.expectedVersion = _planningVersion;
 
-  await apiJson('/api/planning-state', {
+  const result = await apiJson('/api/planning-state', {
     method: 'PATCH',
-    body: JSON.stringify(mergedPayload),
+    body: JSON.stringify(payload),
   });
 
-  applyPlanningPayload(mergedPayload);
+  if (result?.version !== undefined) {
+    _planningVersion = result.version;
+  }
+
+  _serverPlanningBase = cloneJson(buildNormalizedPlanningSnapshot(payload));
+  _lastPlanningSyncSignature = signature;
 }
 
 function queuePlanningSync() {
@@ -705,6 +728,24 @@ function queuePlanningSync() {
       await syncPlanningStateToServer();
     } catch (error) {
       console.error('PLANNING_SYNC_FAILED', error);
+      if (error?.message === 'PLANNING_VERSION_CONFLICT') {
+        // Version conflict: reload fresh state from server and retry
+        try {
+          await syncPlanningFromServer();
+          await syncPlanningStateToServer();
+        } catch (retryError) {
+          console.error('PLANNING_CONFLICT_RECOVERY_FAILED', retryError);
+        }
+      } else {
+        // Retry once after 2 seconds for other errors
+        setTimeout(async () => {
+          try {
+            await syncPlanningStateToServer();
+          } catch (retryError) {
+            console.error('PLANNING_SYNC_RETRY_FAILED', retryError);
+          }
+        }, 2000);
+      }
     }
   }, 250);
 }
@@ -733,6 +774,14 @@ function queueAchievementsSync() {
       await syncAchievementsStateToServer();
     } catch (error) {
       console.error('ACHIEVEMENTS_SYNC_FAILED', error);
+      // Retry once after 2 seconds
+      setTimeout(async () => {
+        try {
+          await syncAchievementsStateToServer();
+        } catch (retryError) {
+          console.error('ACHIEVEMENTS_SYNC_RETRY_FAILED', retryError);
+        }
+      }, 2000);
     }
   }, 250);
 }

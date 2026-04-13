@@ -168,12 +168,36 @@ async function replacePlanningState(
   }
 }
 
-export async function savePlanningState(userId: string, workspaceId: string, input: PlanningStateInput) {
+export async function savePlanningState(
+  userId: string,
+  workspaceId: string,
+  input: PlanningStateInput & { expectedVersion?: number },
+) {
   await assertWorkspaceAccess(userId, workspaceId);
 
-  await prisma.$transaction(async tx => {
+  const newVersion = await prisma.$transaction(async tx => {
+    const workspace = await tx.workspace.findUniqueOrThrow({
+      where: { id: workspaceId },
+      select: { planningVersion: true },
+    });
+
+    if (
+      input.expectedVersion !== undefined &&
+      input.expectedVersion !== workspace.planningVersion
+    ) {
+      throw new Error('PLANNING_VERSION_CONFLICT');
+    }
+
     await replacePlanningState(tx, workspaceId, input);
+
+    const updated = await tx.workspace.update({
+      where: { id: workspaceId },
+      data: { planningVersion: workspace.planningVersion + 1 },
+      select: { planningVersion: true },
+    });
+
+    return updated.planningVersion;
   });
 
-  return { ok: true };
+  return { ok: true, version: newVersion };
 }

@@ -56,6 +56,10 @@ function handlePlanningError(error: unknown, fallbackCode: string) {
       return json({ ok: false, error: 'FORBIDDEN_WORKSPACE_ACCESS' }, 403);
     }
 
+    if (error.message === 'PLANNING_VERSION_CONFLICT') {
+      return json({ ok: false, error: 'PLANNING_VERSION_CONFLICT' }, 409);
+    }
+
     return json(
       {
         ok: false,

@@ -27,6 +27,7 @@ export const planningStateSchema = z.object({
   data: z.record(z.string(), z.record(z.string(), z.record(z.string(), z.array(taskSchema)))),
   projectTemplates: z.record(z.string(), z.record(z.string(), z.array(z.string().trim().min(1)))),
   dayProjects: z.record(z.string(), z.record(z.string(), z.record(z.string(), z.array(z.string().trim().min(1))))),
+  expectedVersion: z.number().int().optional(),
 });
 
 export type PlanningStateInput = z.infer<typeof planningStateSchema>;
