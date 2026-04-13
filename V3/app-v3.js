@@ -81,6 +81,7 @@ let _sidebarDragMeta = null;
 let _planningSyncTimer = null;
 let _lastPlanningSyncSignature = '';
 let _isApplyingServerPlanning = false;
+let _serverPlanningBase = null;
 let _achievementsSyncTimer = null;
 let _lastAchievementsSyncSignature = '';
 let _isApplyingServerAchievements = false;
@@ -449,6 +450,118 @@ function buildPlanningPayload() {
   };
 }
 
+function cloneJson(value) {
+  return JSON.parse(JSON.stringify(value ?? null));
+}
+
+function isPlainObject(value) {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function isEmptyCollection(value) {
+  if (!value) return true;
+  if (Array.isArray(value)) return value.length === 0;
+  if (isPlainObject(value)) return Object.keys(value).length === 0;
+  return false;
+}
+
+function isJsonEqual(a, b) {
+  return JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+}
+
+function buildNormalizedPlanningSnapshot(payload = {}) {
+  return {
+    backlog: normalizeBacklog(payload.backlog),
+    taskProjects: normalizeTaskProjects(
+      payload.taskProjects ?? buildInitialGroupProjectMap(state.groups, state.subs),
+      state.groups,
+      state.subs,
+    ),
+    recurring: normalizeRecurring(payload.recurring, state.subs),
+    recurringStatus: payload.recurringStatus || {},
+    data: normalizeData(payload.data),
+    projectTemplates: payload.projectTemplates || {},
+    dayProjects: normalizeDayProjects(payload.dayProjects),
+  };
+}
+
+function mergeLeafRecord(base = {}, local = {}, latest = {}) {
+  const result = {};
+  const keys = new Set([
+    ...Object.keys(base || {}),
+    ...Object.keys(local || {}),
+    ...Object.keys(latest || {}),
+  ]);
+
+  for (const key of keys) {
+    const baseValue = base?.[key];
+    const localValue = local?.[key];
+    const latestValue = latest?.[key];
+    const chosenValue = isJsonEqual(localValue, baseValue) ? latestValue : localValue;
+
+    if (!isEmptyCollection(chosenValue)) {
+      result[key] = cloneJson(chosenValue);
+    }
+  }
+
+  return result;
+}
+
+function mergeNestedRecord(base = {}, local = {}, latest = {}, depth = 1) {
+  if (depth <= 1) {
+    return mergeLeafRecord(base, local, latest);
+  }
+
+  const result = {};
+  const keys = new Set([
+    ...Object.keys(base || {}),
+    ...Object.keys(local || {}),
+    ...Object.keys(latest || {}),
+  ]);
+
+  for (const key of keys) {
+    const baseValue = base?.[key];
+    const localValue = local?.[key];
+    const latestValue = latest?.[key];
+
+    if (isJsonEqual(localValue, baseValue)) {
+      if (!isEmptyCollection(latestValue)) {
+        result[key] = cloneJson(latestValue);
+      }
+      continue;
+    }
+
+    if (isEmptyCollection(localValue)) {
+      continue;
+    }
+
+    const mergedValue = mergeNestedRecord(baseValue || {}, localValue || {}, latestValue || {}, depth - 1);
+    if (!isEmptyCollection(mergedValue)) {
+      result[key] = mergedValue;
+    }
+  }
+
+  return result;
+}
+
+function mergeRecurringArrays(base = [], local = [], latest = []) {
+  return isJsonEqual(local, base) ? cloneJson(latest || []) || [] : cloneJson(local || []) || [];
+}
+
+function mergePlanningPayload(localPayload, latestPayload) {
+  const basePayload = _serverPlanningBase || buildNormalizedPlanningSnapshot();
+
+  return {
+    backlog: mergeLeafRecord(basePayload.backlog, localPayload.backlog, latestPayload.backlog),
+    taskProjects: mergeLeafRecord(basePayload.taskProjects, localPayload.taskProjects, latestPayload.taskProjects),
+    recurring: mergeRecurringArrays(basePayload.recurring, localPayload.recurring, latestPayload.recurring),
+    recurringStatus: mergeNestedRecord(basePayload.recurringStatus, localPayload.recurringStatus, latestPayload.recurringStatus, 2),
+    data: mergeNestedRecord(basePayload.data, localPayload.data, latestPayload.data, 3),
+    projectTemplates: mergeNestedRecord(basePayload.projectTemplates, localPayload.projectTemplates, latestPayload.projectTemplates, 2),
+    dayProjects: mergeNestedRecord(basePayload.dayProjects, localPayload.dayProjects, latestPayload.dayProjects, 3),
+  };
+}
+
 function getPlanningSyncSignature() {
   return JSON.stringify(buildPlanningPayload());
 }
@@ -504,20 +617,18 @@ function isServerAchievementsEmpty(payload) {
 }
 
 function applyPlanningPayload(payload) {
+  const normalizedPayload = buildNormalizedPlanningSnapshot(payload);
   _isApplyingServerPlanning = true;
   try {
-    state.recurring = normalizeRecurring(payload?.recurring, state.subs);
-    state.recurringStatus = payload?.recurringStatus || {};
-    state.backlog = normalizeBacklog(payload?.backlog);
-    state.taskProjects = normalizeTaskProjects(
-      payload?.taskProjects ?? buildInitialGroupProjectMap(state.groups, state.subs),
-      state.groups,
-      state.subs,
-    );
-    state.data = normalizeData(payload?.data);
-    state.projectTemplates = payload?.projectTemplates || {};
+    state.recurring = normalizedPayload.recurring;
+    state.recurringStatus = normalizedPayload.recurringStatus;
+    state.backlog = normalizedPayload.backlog;
+    state.taskProjects = normalizedPayload.taskProjects;
+    state.data = normalizedPayload.data;
+    state.projectTemplates = normalizedPayload.projectTemplates;
     ensureProjectTemplates(false);
-    state.dayProjects = normalizeDayProjects(payload?.dayProjects);
+    state.dayProjects = normalizedPayload.dayProjects;
+    _serverPlanningBase = cloneJson(normalizedPayload);
     _lastPlanningSyncSignature = getPlanningSyncSignature();
   } finally {
     _isApplyingServerPlanning = false;
@@ -573,12 +684,15 @@ async function syncPlanningStateToServer() {
   const signature = getPlanningSyncSignature();
   if (signature === _lastPlanningSyncSignature) return;
 
+  const latestServerPayload = buildNormalizedPlanningSnapshot(await fetchBootstrapFromServer());
+  const mergedPayload = mergePlanningPayload(buildNormalizedPlanningSnapshot(buildPlanningPayload()), latestServerPayload);
+
   await apiJson('/api/planning-state', {
     method: 'PATCH',
-    body: JSON.stringify(buildPlanningPayload()),
+    body: JSON.stringify(mergedPayload),
   });
 
-  _lastPlanningSyncSignature = signature;
+  applyPlanningPayload(mergedPayload);
 }
 
 function queuePlanningSync() {
