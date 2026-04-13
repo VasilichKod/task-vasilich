@@ -97,13 +97,19 @@
   - `Управление`
   - `Система`
 - `Проекты` и `Группы` раскрываются прямо внутри `Управление`.
-- После подключения auth в sidebar показываются:
-  - имя / email текущего пользователя
-  - кнопка `Выйти`
+- После подключения auth в sidebar показывается текущий пользователь.
+- Кнопка выхода перенесена в `Профиль`.
+- На мобиле используется нижняя навигация:
+  - `График`
+  - `Задачи`
+  - `Достижения`
+  - `Аналитика`
+  - `Меню`
+- Drawer на мобиле используется для вторичных разделов и системных экранов.
 
 ## Данные во фронте
 
-Сейчас фронт все еще использует локальный `localStorage` для основной рабочей логики.
+Во фронте есть локальный кэш, но он больше не общий для всех пользователей.
 
 Главные структуры состояния:
 
@@ -121,9 +127,16 @@
 - `profile`
 - `settings`
 
-Ключ `localStorage`:
+Ключ `localStorage` теперь привязан к:
 
-- `wpv3`
+- `userId`
+- `workspaceId`
+
+Формат:
+
+- `wpv3:{userId}:{workspaceId}`
+
+Это защищает от ситуации, когда новый аккаунт в том же браузере подхватывает старые локальные данные другого workspace.
 
 ## Backend foundation
 
@@ -225,6 +238,8 @@ Endpoint в dev-server:
 
 - `GET /api/bootstrap`
 
+Bootstrap используется как основной серверный снимок workspace после входа.
+
 ### Catalog API
 
 Есть первый backend CRUD-слой для `groups` и `projects`.
@@ -255,9 +270,103 @@ HTTP handlers:
 - очистка активных weekly/day/template/task-page сущностей при архиве проекта
 - сохранение достижений проекта через nullable-ссылки и snapshot-поля
 
+### Planning API
+
+Серверный planning-layer уже подключен.
+
+Покрывает:
+
+- `graph`
+- `backlog`
+- `recurring`
+- `taskProjects`
+- `projectTemplates`
+- `dayProjects`
+
+Endpoint:
+
+- `PATCH /api/planning-state`
+
+### Achievements API
+
+Серверный achievements-layer уже подключен.
+
+Покрывает:
+
+- `achievementYears`
+- `achievements`
+- `achievementProjects`
+
+Endpoint:
+
+- `PATCH /api/achievements-state`
+
 ### Auth layer
 
 Есть базовый auth-layer под email/password.
+
+- `POST /api/auth/register`
+- `POST /api/auth/login`
+- `POST /api/auth/logout`
+- `GET /api/auth/me`
+
+Сессия идет через cookie.
+
+## Account API
+
+Профиль и настройки уже серверные.
+
+Endpoints:
+
+- `GET /api/account`
+- `PATCH /api/account/profile`
+- `PATCH /api/account/settings`
+
+## Продакшен
+
+`V3` уже развернут на VPS.
+
+Текущая prod-схема:
+
+- Ubuntu 24.04
+- Node.js 22
+- PostgreSQL 16
+- nginx
+- systemd
+
+Продовая папка:
+
+- `/var/www/task-vasilich/V3`
+
+`.env` на сервере:
+
+- `/var/www/task-vasilich/V3/.env`
+
+systemd service:
+
+- `task-vasilich-v3`
+
+Прод сейчас обновляется вручную:
+
+1. `git pull origin main`
+2. при необходимости `npm install`
+3. при необходимости `npm run prisma:generate`
+4. при необходимости `npm run prisma:migrate:deploy`
+5. `systemctl restart task-vasilich-v3`
+
+## Что уже считается серверным источником истины
+
+- auth
+- groups/projects
+- archive
+- profile/settings
+- graph
+- backlog/tasks
+- recurring
+- templates
+- achievements
+
+Локальный `localStorage` теперь только кэш/буфер для текущего `user/workspace`, а не источник общих данных для всех аккаунтов.
 
 Файлы:
 

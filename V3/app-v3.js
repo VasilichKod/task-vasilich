@@ -87,6 +87,8 @@ let _isApplyingServerAchievements = false;
 let _hasPersistedLocalWorkspace = false;
 let _graphTouchPan = null;
 
+const LEGACY_STORAGE_KEY = 'wpv3';
+
 const DEFAULT_PROFILE = {
   name: 'Степан',
   email: '',
@@ -101,6 +103,96 @@ const DEFAULT_SETTINGS = {
   openCurrentYearInAchievements: true,
   workspaceName: 'ДЕЙСТВИЯ',
 };
+
+function getWorkspaceStorageKey() {
+  if (!currentUser?.id || !currentUser?.workspace?.id) return null;
+  return `${LEGACY_STORAGE_KEY}:${currentUser.id}:${currentUser.workspace.id}`;
+}
+
+function buildLocalWorkspaceSnapshot() {
+  return {
+    groups: state.groups,
+    subs: state.subs,
+    recurring: state.recurring,
+    recurringStatus: state.recurringStatus,
+    backlog: state.backlog,
+    taskProjects: state.taskProjects,
+    achievements: state.achievements,
+    achievementProjects: state.achievementProjects,
+    achievementYears: state.achievementYears,
+    profile: state.profile,
+    settings: state.settings,
+    data: state.data,
+    projectTemplates: state.projectTemplates,
+    dayProjects: state.dayProjects,
+    dayColumnWidths: state.dayColumnWidths,
+    sidebarCollapsed: state.ui.sidebarCollapsed,
+  };
+}
+
+function applyLocalWorkspaceSnapshot(raw) {
+  state.groups = normalizeGroups(raw.groups);
+  state.subs = normalizeSubs(raw.subs, state.groups);
+  state.recurring = normalizeRecurring(raw.recurring, state.subs);
+  state.recurringStatus = raw.recurringStatus || {};
+  state.backlog = normalizeBacklog(raw.backlog);
+  state.taskProjects = normalizeTaskProjects(
+    raw.taskProjects ?? buildInitialGroupProjectMap(state.groups, state.subs),
+    state.groups,
+    state.subs,
+  );
+  state.achievements = normalizeAchievements(raw.achievements, state.subs);
+  state.achievementProjects = normalizeAchievementProjects(
+    raw.achievementProjects ?? buildInitialAchievementProjectMap(state.groups, state.subs, state.achievements),
+    state.groups,
+    state.subs,
+    state.achievements,
+    raw.achievementYears,
+  );
+  state.achievementYears = normalizeAchievementYears(
+    raw.achievementYears,
+    state.achievements,
+    state.achievementProjects,
+  );
+  state.profile = normalizeProfile(raw.profile);
+  state.settings = normalizeSettings(raw.settings);
+  state.data = normalizeData(raw.data);
+  state.projectTemplates = raw.projectTemplates || {};
+  ensureProjectTemplates(false);
+  state.dayProjects = normalizeDayProjects(raw.dayProjects);
+  state.dayColumnWidths = raw.dayColumnWidths || {};
+  state.ui.sidebarCollapsed = raw.sidebarCollapsed === undefined
+    ? Boolean(state.settings.sidebarCollapsedOnStart)
+    : Boolean(raw.sidebarCollapsed);
+  state.currentView = state.settings.defaultView || 'graph';
+  if (state.settings.openCurrentYearInAchievements) {
+    state.winsYearFilter = String(new Date().getFullYear());
+  }
+}
+
+function loadWorkspaceCacheForCurrentUser() {
+  const storageKey = getWorkspaceStorageKey();
+  if (!storageKey) {
+    _hasPersistedLocalWorkspace = false;
+    return false;
+  }
+
+  try {
+    const raw = JSON.parse(localStorage.getItem(storageKey) || 'null');
+    if (!raw) {
+      _hasPersistedLocalWorkspace = false;
+      return false;
+    }
+
+    applyLocalWorkspaceSnapshot(raw);
+    _hasPersistedLocalWorkspace = true;
+    return true;
+  } catch (error) {
+    console.warn(error);
+    _hasPersistedLocalWorkspace = false;
+    return false;
+  }
+}
 
 function authFetch(path, options = {}) {
   return fetch(`${API_BASE}${path}`, {
@@ -559,6 +651,7 @@ async function submitLogin(event) {
     }
 
     applyCurrentUser(user);
+    loadWorkspaceCacheForCurrentUser();
     await syncCatalogFromServer();
     await syncAccountFromServer();
     await syncPlanningFromServer();
@@ -613,6 +706,7 @@ async function submitRegister(event) {
     }
 
     applyCurrentUser(user);
+    loadWorkspaceCacheForCurrentUser();
     await syncCatalogFromServer();
     await syncAccountFromServer();
     await syncPlanningFromServer();
@@ -644,6 +738,7 @@ async function logoutUser() {
   }
 
   currentUser = null;
+  _hasPersistedLocalWorkspace = false;
   showAuthShell();
 }
 
@@ -1255,24 +1350,11 @@ function insertTask(wk, subId, dayIdx, task) {
 }
 
 function save() {
-  localStorage.setItem('wpv3', JSON.stringify({
-    groups: state.groups,
-    subs: state.subs,
-    recurring: state.recurring,
-    recurringStatus: state.recurringStatus,
-    backlog: state.backlog,
-    taskProjects: state.taskProjects,
-    achievements: state.achievements,
-    achievementProjects: state.achievementProjects,
-    achievementYears: state.achievementYears,
-    profile: state.profile,
-    settings: state.settings,
-    data: state.data,
-    projectTemplates: state.projectTemplates,
-    dayProjects: state.dayProjects,
-    dayColumnWidths: state.dayColumnWidths,
-    sidebarCollapsed: state.ui.sidebarCollapsed,
-  }));
+  const storageKey = getWorkspaceStorageKey();
+  if (storageKey) {
+    localStorage.setItem(storageKey, JSON.stringify(buildLocalWorkspaceSnapshot()));
+    _hasPersistedLocalWorkspace = true;
+  }
   queuePlanningSync();
   queueAchievementsSync();
 }
@@ -1292,53 +1374,6 @@ function seedSample() {
 }
 
 function load() {
-  try {
-    const raw = JSON.parse(localStorage.getItem('wpv3') || 'null');
-    if (raw) {
-      _hasPersistedLocalWorkspace = true;
-      state.groups = normalizeGroups(raw.groups);
-      state.subs = normalizeSubs(raw.subs, state.groups);
-      state.recurring = normalizeRecurring(raw.recurring, state.subs);
-      state.recurringStatus = raw.recurringStatus || {};
-      state.backlog = normalizeBacklog(raw.backlog);
-      state.taskProjects = normalizeTaskProjects(
-        raw.taskProjects ?? buildInitialGroupProjectMap(state.groups, state.subs),
-        state.groups,
-        state.subs,
-      );
-      state.achievements = normalizeAchievements(raw.achievements, state.subs);
-      state.achievementProjects = normalizeAchievementProjects(
-        raw.achievementProjects ?? buildInitialAchievementProjectMap(state.groups, state.subs, state.achievements),
-        state.groups,
-        state.subs,
-        state.achievements,
-        raw.achievementYears,
-      );
-      state.achievementYears = normalizeAchievementYears(
-        raw.achievementYears,
-        state.achievements,
-        state.achievementProjects,
-      );
-      state.profile = normalizeProfile(raw.profile);
-      state.settings = normalizeSettings(raw.settings);
-      state.data = normalizeData(raw.data);
-      state.projectTemplates = raw.projectTemplates || {};
-      ensureProjectTemplates(false);
-      state.dayProjects = normalizeDayProjects(raw.dayProjects);
-      state.dayColumnWidths = raw.dayColumnWidths || {};
-      state.ui.sidebarCollapsed = raw.sidebarCollapsed === undefined
-        ? Boolean(state.settings.sidebarCollapsedOnStart)
-        : Boolean(raw.sidebarCollapsed);
-      state.currentView = state.settings.defaultView || 'graph';
-      if (state.settings.openCurrentYearInAchievements) {
-        state.winsYearFilter = String(new Date().getFullYear());
-      }
-      return;
-    }
-  } catch (error) {
-    console.warn(error);
-  }
-
   _hasPersistedLocalWorkspace = false;
 
   state.groups = normalizeGroups(DEFAULT_GROUPS);
@@ -3727,6 +3762,7 @@ async function initApp() {
     }
 
     applyCurrentUser(user);
+    loadWorkspaceCacheForCurrentUser();
     await syncCatalogFromServer();
     await syncAccountFromServer();
     await syncPlanningFromServer();
