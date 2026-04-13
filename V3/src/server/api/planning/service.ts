@@ -65,7 +65,13 @@ async function replacePlanningState(
   );
 
   if (backlogRows.length) {
-    await tx.backlogTask.createMany({ data: backlogRows });
+    const seenBacklogIds = new Set<string>();
+    const uniqueBacklogRows = backlogRows.filter(row => {
+      if (seenBacklogIds.has(row.id)) return false;
+      seenBacklogIds.add(row.id);
+      return true;
+    });
+    await tx.backlogTask.createMany({ data: uniqueBacklogRows });
   }
 
   const weeklyRows = Object.entries(input.data).flatMap(([wk, projectMap]) =>
@@ -88,7 +94,13 @@ async function replacePlanningState(
   );
 
   if (weeklyRows.length) {
-    await tx.weeklyTask.createMany({ data: weeklyRows });
+    const seenWeeklyIds = new Set<string>();
+    const uniqueWeeklyRows = weeklyRows.filter(row => {
+      if (seenWeeklyIds.has(row.id)) return false;
+      seenWeeklyIds.add(row.id);
+      return true;
+    });
+    await tx.weeklyTask.createMany({ data: uniqueWeeklyRows });
   }
 
   const recurringRows = input.recurring.map((task, index) => ({
@@ -102,7 +114,13 @@ async function replacePlanningState(
   }));
 
   if (recurringRows.length) {
-    await tx.recurringTask.createMany({ data: recurringRows });
+    const seenRecurringIds = new Set<string>();
+    const uniqueRecurringRows = recurringRows.filter(row => {
+      if (seenRecurringIds.has(row.id)) return false;
+      seenRecurringIds.add(row.id);
+      return true;
+    });
+    await tx.recurringTask.createMany({ data: uniqueRecurringRows });
   }
 
   const recurringStatusRows = Object.entries(input.recurringStatus).flatMap(([wk, statusMap]) =>
