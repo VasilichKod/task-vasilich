@@ -1540,7 +1540,7 @@ function load() {
   _hasPersistedLocalWorkspace = false;
 
   state.groups = normalizeGroups(DEFAULT_GROUPS);
-  state.subs = normalizeSubs(DEFAULT_SUBS, state.groups);
+  state.subs = normalizeSubs([], state.groups);
   state.recurring = [];
   state.recurringStatus = {};
   state.backlog = {};
@@ -1561,7 +1561,6 @@ function load() {
   ensureProjectTemplates();
   state.dayProjects = normalizeDayProjects({});
   state.dayColumnWidths = {};
-  seedSample();
 }
 
 async function fetchCatalogFromServer() {
@@ -1607,23 +1606,6 @@ async function ensureDefaultCatalogOnServer() {
       }),
     });
     createdGroups.push(created);
-  }
-
-  const groupIdByLabel = new Map(createdGroups.map(group => [normalizeKey(group.name), group.id]));
-
-  for (const project of DEFAULT_SUBS) {
-    const sourceGroup = DEFAULT_GROUPS.find(group => group.id === project.group);
-    const groupId = sourceGroup ? groupIdByLabel.get(normalizeKey(sourceGroup.label)) : null;
-    if (!groupId) continue;
-
-    await apiJson('/api/catalog/projects', {
-      method: 'POST',
-      body: JSON.stringify({
-        groupId,
-        name: project.label,
-        color: project.color,
-      }),
-    });
   }
 
   const catalog = await fetchCatalogFromServer();
