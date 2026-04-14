@@ -36,13 +36,13 @@
   --border3:   rgba(0, 0, 0, 0.22);
 
   /* Accent */
-  --accent:    #1a5fff;
-  --accent-dim: rgba(26, 95, 255, 0.1);
-  --accent-text: #ffffff;
+  --accent:    #C8E619;
+  --accent-dim: rgba(200, 230, 25, 0.12);
+  --accent-text: #1a1a1a;
 
   /* State */
-  --blue:      #1a5fff;
-  --blue-dim:  rgba(26, 95, 255, 0.1);
+  --blue:      #C8E619;
+  --blue-dim:  rgba(200, 230, 25, 0.12);
   --green:     #0f7a55;
   --green-dim: rgba(15, 122, 85, 0.1);
   --red:       #d93b3b;
@@ -274,15 +274,20 @@ body {
 }
 
 .sidebar-collapse-glyph {
-  display: block;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
   color: var(--sidebar-text);
   font: 400 24px/1 var(--font-sans);
-  transform: translateY(-1px);
+  line-height: 1;
+  transform-origin: center;
   transition: transform var(--t-mid);
 }
 
 .sidebar-collapse-btn.collapsed .sidebar-collapse-glyph {
-  transform: rotate(180deg) translateY(1px);
+  transform: rotate(180deg);
 }
 
 .sidebar-section {
@@ -449,7 +454,7 @@ body {
   justify-content: center;
   padding: 9px 0;
 }
-#app.sidebar-collapsed .sidebar-collapse-glyph { transform: rotate(180deg) translateY(1px); }
+#app.sidebar-collapsed .sidebar-collapse-glyph { transform: rotate(180deg); }
 
 /* summary card */
 .summary-card {
