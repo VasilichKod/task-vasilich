@@ -40,6 +40,7 @@ function getContentType(filePath: string) {
   if (filePath.endsWith('.js')) return 'application/javascript; charset=utf-8';
   if (filePath.endsWith('.json')) return 'application/json; charset=utf-8';
   if (filePath.endsWith('.svg')) return 'image/svg+xml';
+  if (filePath.endsWith('.ico')) return 'image/x-icon';
   return 'text/plain; charset=utf-8';
 }
 
@@ -95,6 +96,10 @@ async function route(request: Request) {
 
   if (request.method === 'GET' && (url.pathname === '/' || url.pathname === '/version3.html')) {
     return serveStaticAsset('version3.html');
+  }
+
+  if (request.method === 'GET' && url.pathname === '/favicon.ico') {
+    return serveStaticAsset('favicon.ico');
   }
 
   if (request.method === 'GET' && url.pathname === '/style-v3.css') {

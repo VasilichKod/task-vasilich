@@ -36,13 +36,14 @@
   --border3:   rgba(0, 0, 0, 0.22);
 
   /* Accent */
-  --accent:    #C8E619;
-  --accent-dim: rgba(200, 230, 25, 0.12);
-  --accent-text: #1a1a1a;
+  --accent:    #D0F518;
+  --accent-dim: rgba(208, 245, 24, 0.12);
+  --accent-text: #2a2a2a;
+  --accent-hover: #8FA811;
 
   /* State */
-  --blue:      #C8E619;
-  --blue-dim:  rgba(200, 230, 25, 0.12);
+  --blue:      #D0F518;
+  --blue-dim:  rgba(208, 245, 24, 0.12);
   --green:     #0f7a55;
   --green-dim: rgba(15, 122, 85, 0.1);
   --red:       #d93b3b;
@@ -76,7 +77,7 @@ body {
   place-items: center;
   padding: 32px 16px;
   background:
-    radial-gradient(circle at top left, rgba(26, 95, 255, 0.06), transparent 28%),
+    radial-gradient(circle at top left, var(--accent-dim), transparent 28%),
     radial-gradient(circle at bottom right, rgba(15, 122, 85, 0.06), transparent 30%),
     var(--bg);
 }
@@ -927,7 +928,7 @@ body {
 /* ─── DRAG STATES ───────────────────────────────────────── */
 .dragging-task { opacity: 0.35; }
 .dragging-project { opacity: 0.3; }
-.drop-target-cell { background: rgba(26, 95, 255, 0.04); }
+.drop-target-cell { background: var(--accent-dim); }
 .drop-indicator {
   height: 2px;
   background: var(--accent);
@@ -1379,14 +1380,14 @@ select option { background: var(--bg3); color: var(--text); }
   border-color: var(--border3);
 }
 .modal-actions .primary {
-  background: rgba(26, 95, 255, 0.06);
+  background: var(--accent-dim);
   border-color: var(--accent);
-  color: var(--accent);
+  color: var(--accent-text);
   font-weight: 600;
 }
 .modal-actions .primary:hover {
-  background: #0048e8;
-  border-color: #0048e8;
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
   color: #fff;
 }
 .modal-actions .danger {
@@ -1426,12 +1427,12 @@ button:hover {
 button.primary {
   background: var(--accent);
   border-color: var(--accent);
-  color: #fff;
+  color: var(--accent-text);
   font-weight: 500;
 }
 button.primary:hover {
-  background: #0048e8;
-  border-color: #0048e8;
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
   color: #fff;
 }
 button[id$="-delete-btn"] {
@@ -1562,7 +1563,7 @@ button[id$="-delete-btn"]:hover {
 .pt-day-check.checked {
   background: var(--accent);
   border-color: var(--accent);
-  color: var(--text-inv);
+  color: var(--accent-text);
   font-weight: 600;
 }
 
@@ -1880,7 +1881,7 @@ button[id$="-delete-btn"]:hover {
 }
 .task-item input[type="checkbox"]:hover {
   border-color: rgba(0, 0, 0, 0.34);
-  box-shadow: 0 0 0 3px rgba(26, 95, 255, 0.06);
+  box-shadow: 0 0 0 3px var(--accent-dim);
 }
 .task-item input[type="checkbox"]:checked {
   background: #1a1a18;
@@ -2294,7 +2295,7 @@ button[id$="-delete-btn"]:hover {
 }
 .settings-check input[type="checkbox"]:hover {
   border-color: rgba(0, 0, 0, 0.34);
-  box-shadow: 0 0 0 3px rgba(26, 95, 255, 0.06);
+  box-shadow: 0 0 0 3px var(--accent-dim);
 }
 .settings-check input[type="checkbox"]:checked {
   background: #1a1a18;
@@ -2327,7 +2328,7 @@ button[id$="-delete-btn"]:hover {
   height: 48px;
   border-radius: 50%;
   background: var(--accent-dim);
-  border: 1px solid rgba(26, 95, 255, 0.2);
+  border: 1px solid rgba(208, 245, 24, 0.2);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2369,7 +2370,7 @@ button[id$="-delete-btn"]:hover {
   gap: 18px;
   min-height: 128px;
   background:
-    linear-gradient(135deg, rgba(26, 95, 255, 0.04), transparent 40%),
+    linear-gradient(135deg, var(--accent-dim), transparent 40%),
     var(--surface);
 }
 
@@ -2575,7 +2576,7 @@ button[id$="-delete-btn"]:hover {
 }
 .project-template-cell input[type="checkbox"]:hover {
   border-color: rgba(0, 0, 0, 0.34);
-  box-shadow: 0 0 0 3px rgba(26, 95, 255, 0.06);
+  box-shadow: 0 0 0 3px var(--accent-dim);
 }
 .project-template-cell input[type="checkbox"]:checked {
   background: #1a1a18;
