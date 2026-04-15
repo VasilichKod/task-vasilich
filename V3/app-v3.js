@@ -3697,7 +3697,9 @@ function stopDayResize() {
 }
 
 function dragTask(event, taskIdValue) {
+  event.stopPropagation();
   event.dataTransfer.setData('text/plain', taskIdValue);
+  event.dataTransfer.setData('application/x-task-drag', 'true');
 }
 
 function dragProject(event, groupId, dayIdx, subId) {
@@ -3735,10 +3737,29 @@ function moveProjectWithTasks(wk, sourceGroupId, sourceDayIdx, sourceSubId, targ
     const sourceTasks = getCellForWeek(wk, sourceSubId, sourceDayIdx);
     const movedTasks = [...sourceTasks];
     state.data[wk][sourceSubId][sourceDayIdx] = [];
-    state.data[wk][sourceSubId][targetDayIdx] = movedTasks;
+    const existingTarget = getCellForWeek(wk, sourceSubId, targetDayIdx);
+    existingTarget.push(...movedTasks);
   }
 
   return true;
+}
+
+function dropTaskOnDay(event, targetGroupId, targetDayIdx) {
+  const taskIdValue = event.dataTransfer.getData('text/plain');
+  if (!taskIdValue || taskIdValue.startsWith('recurring|')) return;
+  const wk = weekKey(state.weekOffset);
+  const record = findTaskRecord(taskIdValue, wk);
+  if (!record) return;
+  const sourceProject = getSub(record.subId);
+  if (!sourceProject || sourceProject.group !== targetGroupId) return;
+  const removed = removeTaskById(taskIdValue, wk);
+  if (!removed) return;
+  insertTask(wk, removed.subId, targetDayIdx, removed.task);
+  if (!getDayProjects(wk, targetGroupId, targetDayIdx).includes(removed.subId)) {
+    getDayProjects(wk, targetGroupId, targetDayIdx).push(removed.subId);
+  }
+  save();
+  renderBoard();
 }
 
 function dropTask(event, targetSubId, targetDayIdx) {
@@ -3758,6 +3779,10 @@ function dropTask(event, targetSubId, targetDayIdx) {
 
 function dropProject(event, targetGroupId, targetDayIdx) {
   event.preventDefault();
+  if (event.dataTransfer.getData('application/x-task-drag')) {
+    dropTaskOnDay(event, targetGroupId, targetDayIdx);
+    return;
+  }
   const raw = event.dataTransfer.getData('application/x-project-card');
   if (!raw) return;
   let payload;
@@ -3779,6 +3804,10 @@ function dropProject(event, targetGroupId, targetDayIdx) {
 
 function dropProjectOnCard(event, targetGroupId, targetDayIdx, targetSubId) {
   event.preventDefault();
+  if (event.dataTransfer.getData('application/x-task-drag')) {
+    dropTask(event, targetSubId, targetDayIdx);
+    return;
+  }
   const raw = event.dataTransfer.getData('application/x-project-card');
   if (!raw) return;
   let payload;
