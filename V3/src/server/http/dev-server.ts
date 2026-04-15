@@ -41,6 +41,7 @@ function getContentType(filePath: string) {
   if (filePath.endsWith('.json')) return 'application/json; charset=utf-8';
   if (filePath.endsWith('.svg')) return 'image/svg+xml';
   if (filePath.endsWith('.ico')) return 'image/x-icon';
+  if (filePath.endsWith('.png')) return 'image/png';
   return 'text/plain; charset=utf-8';
 }
 
@@ -100,6 +101,18 @@ async function route(request: Request) {
 
   if (request.method === 'GET' && url.pathname === '/favicon.ico') {
     return serveStaticAsset('favicon.ico');
+  }
+
+  if (request.method === 'GET' && url.pathname === '/apple-touch-icon.png') {
+    return serveStaticAsset('apple-touch-icon.png');
+  }
+
+  if (request.method === 'GET' && url.pathname === '/icon-192.png') {
+    return serveStaticAsset('icon-192.png');
+  }
+
+  if (request.method === 'GET' && url.pathname === '/icon-512.png') {
+    return serveStaticAsset('icon-512.png');
   }
 
   if (request.method === 'GET' && url.pathname === '/style-v3.css') {
