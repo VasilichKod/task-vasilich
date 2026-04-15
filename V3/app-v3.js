@@ -1875,7 +1875,7 @@ function renderBoard() {
     DAYS.forEach((day, dayIdx) => {
       const projectIds = getDayProjects(wk, group.id, dayIdx);
       const width = getDayColumnWidth(dayIdx);
-      html += `<td class="day-cell" style="width:${width}px;min-width:${width}px;max-width:${width}px" ondragover="allowProjectDrop(event)" ondrop="dropProject(event, '${group.id}', ${dayIdx})"><div class="day-stack">`;
+      html += `<td class="day-cell" style="width:${width}px;min-width:${width}px;max-width:${width}px" ondragover="allowProjectDrop(event)" ondragleave="leaveDayCell(event)" ondrop="dropProject(event, '${group.id}', ${dayIdx})"><div class="day-stack">`;
 
       projectIds.forEach(subId => {
         const project = getSub(subId);
@@ -3712,6 +3712,15 @@ function allowDrop(event) {
 
 function allowProjectDrop(event) {
   event.preventDefault();
+  const cell = event.currentTarget;
+  if (cell && cell.classList.contains('day-cell')) {
+    cell.classList.add('drop-target-cell');
+  }
+}
+
+function leaveDayCell(event) {
+  const cell = event.currentTarget;
+  if (cell) cell.classList.remove('drop-target-cell');
 }
 
 function moveProjectWithTasks(wk, sourceGroupId, sourceDayIdx, sourceSubId, targetGroupId, targetDayIdx, targetIndex = null) {
@@ -3779,10 +3788,32 @@ function dropTask(event, targetSubId, targetDayIdx) {
 
 function dropProject(event, targetGroupId, targetDayIdx) {
   event.preventDefault();
+  const cell = event.currentTarget;
+  if (cell) cell.classList.remove('drop-target-cell');
+
   if (event.dataTransfer.getData('application/x-task-drag')) {
     dropTaskOnDay(event, targetGroupId, targetDayIdx);
     return;
   }
+
+  const sidebarRaw = event.dataTransfer.getData('application/x-sidebar-item');
+  if (sidebarRaw) {
+    let sidebarPayload;
+    try { sidebarPayload = JSON.parse(sidebarRaw); } catch { return; }
+    if (sidebarPayload?.type === 'project') {
+      const project = getSub(sidebarPayload.id);
+      if (!project || project.group !== targetGroupId) return;
+      const wk = weekKey(state.weekOffset);
+      const dayList = getDayProjects(wk, targetGroupId, targetDayIdx);
+      if (!dayList.includes(project.id)) {
+        dayList.push(project.id);
+        save();
+        renderBoard();
+      }
+    }
+    return;
+  }
+
   const raw = event.dataTransfer.getData('application/x-project-card');
   if (!raw) return;
   let payload;
