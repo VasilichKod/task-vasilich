@@ -1661,6 +1661,10 @@ button[id$="-delete-btn"]:hover {
   .recurring-modal-layout {
     grid-template-columns: 1fr;
   }
+
+  .tasks-project-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* ─── VIEW SECTION TITLES ───────────────────────────────── */
@@ -1715,6 +1719,11 @@ button[id$="-delete-btn"]:hover {
   color: var(--text2);
   border-bottom: 1px solid var(--border2);
   border-left: 1px solid var(--border);
+}
+.day-head.today .day-head-label {
+  background: var(--accent);
+  color: var(--accent-text);
+  border-bottom-color: var(--accent);
 }
 .day-resize-handle {
   position: absolute;
@@ -1886,8 +1895,8 @@ button[id$="-delete-btn"]:hover {
   box-shadow: 0 0 0 3px var(--accent-dim);
 }
 .task-item input[type="checkbox"]:checked {
-  background: #1a1a18;
-  border-color: #1a1a18;
+  background: #a0a09a;
+  border-color: #a0a09a;
 }
 .task-item input[type="checkbox"]:checked::after {
   content: '';
@@ -2030,6 +2039,7 @@ button[id$="-delete-btn"]:hover {
   transition: border-color var(--t-fast);
 }
 .tasks-project-card:hover { border-color: var(--border2); }
+.tasks-project-card.drop-target-cell { border-color: var(--accent); background: var(--accent-dim); }
 .tasks-project-head {
   display: flex;
   align-items: center;

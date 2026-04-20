@@ -1454,7 +1454,8 @@ function getDisplayTasksForCell(wk, subId, dayIdx) {
       };
     });
   const regular = getCellForWeek(wk, subId, dayIdx).map(task => ({ ...task, recurring: false }));
-  return [...recurring, ...regular];
+  const all = [...recurring, ...regular];
+  return [...all.filter(t => !t.done), ...all.filter(t => t.done)];
 }
 
 function findTaskRecord(taskIdValue, wk = weekKey(state.weekOffset)) {
@@ -1860,10 +1861,12 @@ function renderBoard() {
   renderSidebarSummary();
   renderSidebarLists();
 
+  const todayDayIdx = state.weekOffset === 0 ? (new Date().getDay() + 6) % 7 : -1;
   let html = '<tr><th class="group-head"></th>';
   DAYS.forEach((day, dayIdx) => {
     const width = getDayColumnWidth(dayIdx);
-    html += `<th class="day-head" style="width:${width}px;min-width:${width}px;max-width:${width}px">
+    const isToday = dayIdx === todayDayIdx;
+    html += `<th class="day-head${isToday ? ' today' : ''}" style="width:${width}px;min-width:${width}px;max-width:${width}px">
       <span class="day-head-label">${day}</span>
       <button class="day-resize-handle" type="button" onpointerdown="startDayResize(event, ${dayIdx})" aria-label="Изменить ширину столбца ${day}"></button>
     </th>`;
@@ -1938,11 +1941,12 @@ function renderTasksView() {
         <div class="tasks-group-head">
           <div class="tasks-group-title" style="color:${group.color}">${escapeHtml(group.label)}</div>
         </div>
-        <div class="tasks-project-grid">
+        <div class="tasks-project-grid" ondragover="allowTasksGridDrop(event)" ondrop="dropProjectOnTasksGrid(event, '${group.id}')" ondragleave="leaveTasksGrid(event)">
           ${projects.map(project => {
-            const tasks = getBacklogForProject(project.id);
+            const rawTasks = getBacklogForProject(project.id);
+            const tasks = [...rawTasks.filter(t => !t.done), ...rawTasks.filter(t => t.done)];
             return `
-              <article class="tasks-project-card" style="--project-line:${project.color}">
+              <article class="tasks-project-card" style="--project-line:${project.color}" draggable="true" ondragstart="dragTasksCard(event, '${group.id}', '${project.id}')" ondragover="allowTasksCardDrop(event)" ondrop="dropProjectOnTasksCard(event, '${group.id}', '${project.id}')" ondragleave="leaveTasksCard(event)">
                 <div class="tasks-project-head">
                   <div class="tasks-project-title">${escapeHtml(project.label)}</div>
                   <button class="tasks-project-remove" type="button" onclick="removeProjectFromTasks('${group.id}', '${project.id}')" title="Убрать проект из страницы задач">×</button>
@@ -3751,6 +3755,92 @@ function moveProjectWithTasks(wk, sourceGroupId, sourceDayIdx, sourceSubId, targ
   }
 
   return true;
+}
+
+function allowTasksGridDrop(event) {
+  event.preventDefault();
+  if (event.dataTransfer.getData('application/x-sidebar-item') || event.currentTarget === event.target) {
+    event.currentTarget.classList.add('drop-target-cell');
+  }
+}
+
+function leaveTasksGrid(event) {
+  event.currentTarget.classList.remove('drop-target-cell');
+}
+
+function allowTasksCardDrop(event) {
+  event.preventDefault();
+  event.stopPropagation();
+  event.currentTarget.classList.add('drop-target-cell');
+}
+
+function leaveTasksCard(event) {
+  event.currentTarget.classList.remove('drop-target-cell');
+}
+
+function dragTasksCard(event, groupId, projectId) {
+  event.stopPropagation();
+  event.dataTransfer.setData('application/x-tasks-card', JSON.stringify({ groupId, projectId }));
+}
+
+function dropProjectOnTasksGrid(event, targetGroupId) {
+  event.currentTarget.classList.remove('drop-target-cell');
+  const sidebarRaw = event.dataTransfer.getData('application/x-sidebar-item');
+  if (sidebarRaw) {
+    let payload;
+    try { payload = JSON.parse(sidebarRaw); } catch { return; }
+    if (payload?.type !== 'project') return;
+    const project = getSub(payload.id);
+    if (!project || project.group !== targetGroupId) return;
+    const list = getTaskProjectsForGroup(targetGroupId);
+    if (!list.includes(project.id)) {
+      list.push(project.id);
+      save();
+      renderTasksView();
+    }
+  }
+}
+
+function dropProjectOnTasksCard(event, targetGroupId, targetProjectId) {
+  event.preventDefault();
+  event.stopPropagation();
+  event.currentTarget.classList.remove('drop-target-cell');
+
+  const cardRaw = event.dataTransfer.getData('application/x-tasks-card');
+  if (cardRaw) {
+    let payload;
+    try { payload = JSON.parse(cardRaw); } catch { return; }
+    if (!payload || payload.groupId !== targetGroupId || payload.projectId === targetProjectId) return;
+    const list = getTaskProjectsForGroup(targetGroupId);
+    const sourceIdx = list.indexOf(payload.projectId);
+    const targetIdx = list.indexOf(targetProjectId);
+    if (sourceIdx === -1 || targetIdx === -1) return;
+    list.splice(sourceIdx, 1);
+    list.splice(targetIdx, 0, payload.projectId);
+    save();
+    renderTasksView();
+    return;
+  }
+
+  const sidebarRaw = event.dataTransfer.getData('application/x-sidebar-item');
+  if (sidebarRaw) {
+    let payload;
+    try { payload = JSON.parse(sidebarRaw); } catch { return; }
+    if (payload?.type !== 'project') return;
+    const project = getSub(payload.id);
+    if (!project || project.group !== targetGroupId) return;
+    const list = getTaskProjectsForGroup(targetGroupId);
+    const targetIdx = list.indexOf(targetProjectId);
+    if (!list.includes(project.id)) {
+      list.splice(targetIdx, 0, project.id);
+    } else {
+      const sourceIdx = list.indexOf(project.id);
+      list.splice(sourceIdx, 1);
+      list.splice(targetIdx, 0, project.id);
+    }
+    save();
+    renderTasksView();
+  }
 }
 
 function dropTaskOnDay(event, targetGroupId, targetDayIdx) {
