@@ -582,6 +582,7 @@ body {
   letter-spacing: 0.02em;
   white-space: nowrap;
 }
+.week-label-mobile { display: none; }
 
 .page-title {
   font: 500 14px/1 var(--font-mono);
@@ -1633,6 +1634,7 @@ button[id$="-delete-btn"]:hover {
   }
 
   .week-label { display: none; }
+  .week-label-mobile { display: inline; font: 400 11px/1 var(--font-mono); color: var(--text2); white-space: nowrap; }
 
   .mobile-nav {
     position: fixed;

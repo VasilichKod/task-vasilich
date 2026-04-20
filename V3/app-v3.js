@@ -1319,6 +1319,15 @@ function weekLabel(offset) {
   return `Неделя ${weekNumber}: ${formatDate(monday)} – ${formatDate(sunday)}`;
 }
 
+function weekLabelShort(offset) {
+  const now = new Date();
+  const day = now.getDay() || 7;
+  const monday = new Date(now);
+  monday.setDate(now.getDate() - day + 1 + offset * 7);
+  const weekNumber = Math.ceil((monday - new Date(monday.getFullYear(), 0, 1)) / 604800000) + 1;
+  return `Нед. ${weekNumber}`;
+}
+
 function escapeHtml(value) {
   return String(value)
     .replaceAll('&', '&amp;')
@@ -1857,6 +1866,7 @@ function renderBoard() {
   const wk = weekKey(state.weekOffset);
   ensureDayProjectsWeek(wk);
   document.getElementById('week-label').textContent = weekLabel(state.weekOffset);
+  document.getElementById('week-label-mobile').textContent = weekLabelShort(state.weekOffset);
   renderStats();
   renderSidebarSummary();
   renderSidebarLists();
