@@ -1721,9 +1721,9 @@ button[id$="-delete-btn"]:hover {
   border-left: 1px solid var(--border);
 }
 .day-head.today .day-head-label {
-  background: var(--accent);
+  background: rgba(208, 245, 24, 0.5);
   color: var(--accent-text);
-  border-bottom-color: var(--accent);
+  border-bottom-color: rgba(208, 245, 24, 0.5);
 }
 .day-resize-handle {
   position: absolute;
