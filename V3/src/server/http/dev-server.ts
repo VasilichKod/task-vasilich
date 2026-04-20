@@ -103,6 +103,10 @@ async function route(request: Request) {
     return serveStaticAsset('favicon.ico');
   }
 
+  if (request.method === 'GET' && url.pathname === '/manifest.json') {
+    return serveStaticAsset('manifest.json');
+  }
+
   if (request.method === 'GET' && url.pathname === '/apple-touch-icon.png') {
     return serveStaticAsset('apple-touch-icon.png');
   }
