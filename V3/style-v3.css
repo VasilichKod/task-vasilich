@@ -2660,3 +2660,32 @@ button[id$="-delete-btn"]:hover {
   60%      { content: '...'; }
   80%, 100%{ content: ''; }
 }
+
+/* ─── SPLASH SCREEN ─────────────────────────────────────── */
+#splash {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 0.4s ease;
+}
+
+#splash.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+#splash-icon {
+  width: 96px;
+  height: 96px;
+  border-radius: 22px;
+  animation: splash-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes splash-pulse {
+  0%, 100% { transform: scale(1);   opacity: 1; }
+  50%       { transform: scale(0.88); opacity: 0.7; }
+}

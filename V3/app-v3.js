@@ -3975,6 +3975,7 @@ async function initApp() {
     const user = await fetchCurrentUserSession();
     if (!user) {
       showAuthShell();
+      hideSplash();
       return;
     }
 
@@ -3987,10 +3988,19 @@ async function initApp() {
     renderSidebarLists();
     renderCurrentView();
     showAppShell();
+    hideSplash();
   } catch (error) {
     console.error(error);
     showAuthShell();
+    hideSplash();
   }
+}
+
+function hideSplash() {
+  const splash = document.getElementById('splash');
+  if (!splash) return;
+  splash.classList.add('hidden');
+  setTimeout(() => splash.remove(), 450);
 }
 
 initApp();
