@@ -1325,7 +1325,7 @@ function weekLabelShort(offset) {
   const monday = new Date(now);
   monday.setDate(now.getDate() - day + 1 + offset * 7);
   const weekNumber = Math.ceil((monday - new Date(monday.getFullYear(), 0, 1)) / 604800000) + 1;
-  return `Нед. ${weekNumber}`;
+  return `${weekNumber}`;
 }
 
 function escapeHtml(value) {
