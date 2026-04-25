@@ -32,23 +32,35 @@ export async function verifySessionToken(token: string) {
 }
 
 export function createSessionCookie(token: string) {
-  return [
+  const cookieParts = [
     `${SESSION_COOKIE_NAME}=${token}`,
     'Path=/',
     'HttpOnly',
     'SameSite=Lax',
     'Max-Age=2592000',
-  ].join('; ');
+  ];
+
+  if (process.env.NODE_ENV === 'production') {
+    cookieParts.push('Secure');
+  }
+
+  return cookieParts.join('; ');
 }
 
 export function clearSessionCookie() {
-  return [
+  const cookieParts = [
     `${SESSION_COOKIE_NAME}=`,
     'Path=/',
     'HttpOnly',
     'SameSite=Lax',
     'Max-Age=0',
-  ].join('; ');
+  ];
+
+  if (process.env.NODE_ENV === 'production') {
+    cookieParts.push('Secure');
+  }
+
+  return cookieParts.join('; ');
 }
 
 export function readSessionTokenFromCookieHeader(cookieHeader: string | null) {

@@ -18,6 +18,7 @@
 
 3. Скопировать env:
    `cp .env.example .env`
+   и заполнить `ADMIN_EMAILS`, если нужен просмотр статистики пользователей
 
 4. Сгенерировать Prisma client:
    `npm run prisma:generate`
@@ -70,5 +71,6 @@
   - `POST /api/auth/register`
   - `POST /api/auth/login`
   - `POST /api/auth/logout`
-  - `GET /api/auth/me`
-  - `GET /api/bootstrap`
+- `GET /api/auth/me`
+- `GET /api/bootstrap`
+- `GET /api/admin/stats` — только для email из `ADMIN_EMAILS`

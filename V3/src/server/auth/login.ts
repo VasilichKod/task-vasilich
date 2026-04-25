@@ -1,3 +1,4 @@
+import { markUserLogin } from './activity.js';
 import { prisma } from '../db/client.js';
 import { verifyPassword } from './password.js';
 import { createSessionToken, type SessionPayload } from './session.js';
@@ -53,6 +54,8 @@ export async function loginUser(input: LoginInput) {
   if (!primaryMembership) {
     throw new Error('USER_HAS_NO_WORKSPACE');
   }
+
+  await markUserLogin(user.id);
 
   const sessionPayload: SessionPayload = {
     userId: user.id,

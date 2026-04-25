@@ -1,3 +1,5 @@
+export { requireAdminSession } from './admin.js';
+export { markUserLogin, markUserSeen } from './activity.js';
 export { getCurrentSessionFromRequest, getCurrentUserFromRequest } from './current-user.js';
 export {
   handleCurrentUserRequest,

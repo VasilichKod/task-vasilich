@@ -181,6 +181,10 @@ function handleCatalogError(error: unknown, fallbackCode: string) {
       return json({ ok: false, error: 'FORBIDDEN_WORKSPACE_ACCESS' }, 403);
     }
 
+    if (error.message === 'INSUFFICIENT_WORKSPACE_ROLE') {
+      return json({ ok: false, error: 'INSUFFICIENT_WORKSPACE_ROLE' }, 403);
+    }
+
     if (
       error.message === 'GROUP_NOT_FOUND' ||
       error.message === 'PROJECT_NOT_FOUND'
@@ -190,7 +194,8 @@ function handleCatalogError(error: unknown, fallbackCode: string) {
 
     if (
       error.message === 'SYSTEM_GROUP_ARCHIVE_FORBIDDEN' ||
-      error.message === 'SYSTEM_GROUP_RENAME_FORBIDDEN'
+      error.message === 'SYSTEM_GROUP_RENAME_FORBIDDEN' ||
+      error.message === 'PROJECT_GROUP_MISMATCH'
     ) {
       return json({ ok: false, error: error.message }, 409);
     }

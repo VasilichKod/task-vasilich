@@ -1,27 +1,8 @@
 import type { Prisma } from '@prisma/client';
 
+import { requireWorkspaceMutationAccess } from '../../auth/workspace-access.js';
 import { prisma } from '../../db/client.js';
 import type { PlanningStateInput } from './schema.js';
-
-async function assertWorkspaceAccess(userId: string, workspaceId: string) {
-  const membership = await prisma.workspaceMember.findUnique({
-    where: {
-      workspaceId_userId: {
-        workspaceId,
-        userId,
-      },
-    },
-    select: {
-      role: true,
-    },
-  });
-
-  if (!membership) {
-    throw new Error('FORBIDDEN_WORKSPACE_ACCESS');
-  }
-
-  return membership;
-}
 
 function parseWeekKeyToDate(weekKey: string) {
   const match = /^w(\d{4})(\d{2})(\d{2})$/.exec(weekKey);
@@ -38,11 +19,114 @@ function normalizeText(value: string | undefined) {
   return value?.trim() ?? '';
 }
 
+async function loadWorkspaceProjectState(
+  workspaceId: string,
+  tx: Prisma.TransactionClient,
+) {
+  const [groups, projects] = await Promise.all([
+    tx.group.findMany({
+      where: {
+        workspaceId,
+        archivedAt: null,
+      },
+      select: {
+        id: true,
+      },
+    }),
+    tx.project.findMany({
+      where: {
+        workspaceId,
+        archivedAt: null,
+      },
+      select: {
+        id: true,
+        groupId: true,
+      },
+    }),
+  ]);
+
+  return {
+    groupIds: new Set(groups.map(group => group.id)),
+    projectGroupMap: new Map(projects.map(project => [project.id, project.groupId])),
+  };
+}
+
+async function validatePlanningStateReferences(
+  tx: Prisma.TransactionClient,
+  workspaceId: string,
+  input: PlanningStateInput,
+) {
+  const { groupIds, projectGroupMap } = await loadWorkspaceProjectState(workspaceId, tx);
+  const projectIds = new Set(projectGroupMap.keys());
+
+  const assertKnownGroup = (groupId: string) => {
+    if (!groupIds.has(groupId)) {
+      throw new Error('GROUP_NOT_FOUND');
+    }
+  };
+
+  const assertKnownProject = (projectId: string) => {
+    if (!projectIds.has(projectId)) {
+      throw new Error('PROJECT_NOT_FOUND');
+    }
+  };
+
+  const assertProjectBelongsToGroup = (groupId: string, projectId: string) => {
+    assertKnownGroup(groupId);
+    assertKnownProject(projectId);
+
+    if (projectGroupMap.get(projectId) !== groupId) {
+      throw new Error('PROJECT_GROUP_MISMATCH');
+    }
+  };
+
+  Object.keys(input.backlog).forEach(assertKnownProject);
+  Object.keys(input.data).forEach(weekKey => parseWeekKeyToDate(weekKey));
+  Object.values(input.data).forEach(projectMap => {
+    Object.keys(projectMap).forEach(assertKnownProject);
+  });
+  input.recurring.forEach(task => assertKnownProject(task.subId));
+
+  const recurringTaskIds = new Set(input.recurring.map(task => task.id));
+  Object.entries(input.recurringStatus).forEach(([weekKey, statusMap]) => {
+    parseWeekKeyToDate(weekKey);
+    Object.keys(statusMap).forEach(recurringTaskId => {
+      if (!recurringTaskIds.has(recurringTaskId)) {
+        throw new Error('INVALID_RECURRING_TASK_REFERENCE');
+      }
+    });
+  });
+
+  Object.entries(input.taskProjects).forEach(([groupId, taskProjectIds]) => {
+    assertKnownGroup(groupId);
+    taskProjectIds.forEach(projectId => assertProjectBelongsToGroup(groupId, projectId));
+  });
+
+  Object.entries(input.projectTemplates).forEach(([groupId, dayMap]) => {
+    assertKnownGroup(groupId);
+    Object.values(dayMap).forEach(projectIdsForDay => {
+      projectIdsForDay.forEach(projectId => assertProjectBelongsToGroup(groupId, projectId));
+    });
+  });
+
+  Object.entries(input.dayProjects).forEach(([weekKey, groupMap]) => {
+    parseWeekKeyToDate(weekKey);
+    Object.entries(groupMap).forEach(([groupId, dayMap]) => {
+      assertKnownGroup(groupId);
+      Object.values(dayMap).forEach(projectIdsForDay => {
+        projectIdsForDay.forEach(projectId => assertProjectBelongsToGroup(groupId, projectId));
+      });
+    });
+  });
+}
+
 async function replacePlanningState(
   tx: Prisma.TransactionClient,
   workspaceId: string,
   input: PlanningStateInput,
 ) {
+  await validatePlanningStateReferences(tx, workspaceId, input);
+
   await tx.recurringTaskStatus.deleteMany({ where: { workspaceId } });
   await tx.weeklyTask.deleteMany({ where: { workspaceId } });
   await tx.backlogTask.deleteMany({ where: { workspaceId } });
@@ -191,7 +275,7 @@ export async function savePlanningState(
   workspaceId: string,
   input: PlanningStateInput & { expectedVersion?: number },
 ) {
-  await assertWorkspaceAccess(userId, workspaceId);
+  await requireWorkspaceMutationAccess(userId, workspaceId);
 
   const newVersion = await prisma.$transaction(async tx => {
     const workspace = await tx.workspace.findUniqueOrThrow({

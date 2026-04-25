@@ -3,6 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { handleWorkspaceBootstrapRequest } from '../api/bootstrap/index.js';
+import { handleGetAdminStatsRequest } from '../api/admin/index.js';
 import {
   handleGetAccountRequest,
   handleUpdateProfileRequest,
@@ -74,14 +75,16 @@ async function serveStaticAsset(relativePath: string) {
 
 function withCors(request: Request, response: Response) {
   const requestOrigin = request.headers.get('origin');
-  const allowOrigin = requestOrigin && requestOrigin !== 'null'
-    ? requestOrigin
-    : requestOrigin === 'null'
-      ? 'null'
-      : process.env.APP_URL ?? 'http://localhost:3000';
   const headers = new Headers(response.headers);
-  headers.set('access-control-allow-origin', allowOrigin);
-  headers.set('access-control-allow-credentials', 'true');
+  const appUrl = process.env.APP_URL ?? `http://localhost:${port}`;
+  const allowedOrigin = requestOrigin && requestOrigin === appUrl ? requestOrigin : null;
+
+  if (allowedOrigin) {
+    headers.set('access-control-allow-origin', allowedOrigin);
+    headers.set('access-control-allow-credentials', 'true');
+    headers.set('vary', 'origin');
+  }
+
   headers.set('access-control-allow-headers', 'content-type');
   headers.set('access-control-allow-methods', 'GET,POST,PATCH,DELETE,OPTIONS');
 
@@ -149,6 +152,10 @@ async function route(request: Request) {
 
   if (request.method === 'GET' && url.pathname === '/api/bootstrap') {
     return withCors(request, await handleWorkspaceBootstrapRequest(request));
+  }
+
+  if (request.method === 'GET' && url.pathname === '/api/admin/stats') {
+    return withCors(request, await handleGetAdminStatsRequest(request));
   }
 
   if (request.method === 'GET' && url.pathname === '/api/account') {

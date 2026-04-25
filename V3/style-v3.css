@@ -149,6 +149,48 @@ body {
   line-height: 1.2;
 }
 
+.password-field {
+  position: relative;
+}
+
+.password-field input {
+  width: 100%;
+  padding-right: 112px;
+}
+
+.password-toggle {
+  position: absolute;
+  top: 50%;
+  right: 10px;
+  transform: translateY(-50%);
+  min-width: 88px;
+  height: 34px;
+  border: 1px solid var(--border);
+  background: var(--surface2);
+  color: var(--text2);
+  font: 500 12px/1 var(--font-sans);
+  cursor: pointer;
+  transition: border-color var(--t-fast), color var(--t-fast), background var(--t-fast);
+}
+
+.password-toggle:hover {
+  border-color: var(--border2);
+  color: var(--text);
+}
+
+.password-toggle.active {
+  border-color: var(--text);
+  color: var(--text);
+  background: var(--surface);
+}
+
+.auth-note {
+  margin-top: -2px;
+  color: var(--text2);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
 .auth-submit {
   width: 100%;
   min-height: 42px;

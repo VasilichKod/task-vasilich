@@ -28,6 +28,8 @@ model User {
   email          String            @unique
   passwordHash   String?           @map("password_hash")
   isActive       Boolean           @default(true) @map("is_active")
+  lastLoginAt    DateTime?         @map("last_login_at")
+  lastSeenAt     DateTime?         @map("last_seen_at")
   createdAt      DateTime          @default(now()) @map("created_at")
   updatedAt      DateTime          @updatedAt @map("updated_at")
 
@@ -36,6 +38,7 @@ model User {
   memberships    WorkspaceMember[]
   settings       UserSetting[]
 
+  @@index([lastSeenAt])
   @@map("users")
 }
 

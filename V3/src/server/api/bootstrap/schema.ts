@@ -5,10 +5,4 @@ export const workspaceBootstrapInputSchema = z.object({
   workspaceId: z.string().min(1),
 });
 
-export const workspaceBootstrapQuerySchema = z.object({
-  userId: z.string().min(1),
-  workspaceId: z.string().min(1),
-});
-
 export type WorkspaceBootstrapInput = z.infer<typeof workspaceBootstrapInputSchema>;
-export type WorkspaceBootstrapQuery = z.infer<typeof workspaceBootstrapQuerySchema>;

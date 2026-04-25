@@ -40,12 +40,16 @@
       <form class="auth-form" id="auth-login-form" onsubmit="submitLogin(event)">
         <label class="field-group">
           <span class="form-label">Email</span>
-          <input id="login-email" type="email" autocomplete="email" placeholder="name@email.com" />
+          <input id="login-email" type="email" autocomplete="email" autocapitalize="off" spellcheck="false" placeholder="name@email.com" />
         </label>
         <label class="field-group">
           <span class="form-label">Пароль</span>
-          <input id="login-password" type="password" autocomplete="current-password" placeholder="Минимум 8 символов" />
+          <div class="password-field">
+            <input id="login-password" type="password" autocomplete="current-password" autocapitalize="off" spellcheck="false" placeholder="Минимум 8 символов" />
+            <button class="password-toggle" type="button" onclick="togglePasswordVisibility('login-password', this)" aria-label="Показать пароль" aria-pressed="false">Показать</button>
+          </div>
         </label>
+        <div class="auth-note">Пароль можно показать кнопкой справа.</div>
         <button class="primary auth-submit" id="auth-login-submit" type="submit">Войти</button>
       </form>
 
@@ -56,16 +60,20 @@
         </label>
         <label class="field-group">
           <span class="form-label">Email</span>
-          <input id="register-email" type="email" autocomplete="email" placeholder="name@email.com" />
+          <input id="register-email" type="email" autocomplete="email" autocapitalize="off" spellcheck="false" placeholder="name@email.com" />
         </label>
         <label class="field-group">
           <span class="form-label">Пароль</span>
-          <input id="register-password" type="password" autocomplete="new-password" placeholder="Минимум 8 символов" />
+          <div class="password-field">
+            <input id="register-password" type="password" autocomplete="new-password" autocapitalize="off" spellcheck="false" placeholder="Минимум 8 символов" />
+            <button class="password-toggle" type="button" onclick="togglePasswordVisibility('register-password', this)" aria-label="Показать пароль" aria-pressed="false">Показать</button>
+          </div>
         </label>
         <label class="field-group">
           <span class="form-label">Название пространства</span>
           <input id="register-workspace-name" type="text" value="ДЕЙСТВИЯ" placeholder="ДЕЙСТВИЯ" />
         </label>
+        <div class="auth-note">Используй название пространства, под которым ты будешь видеть свой кабинет.</div>
         <button class="primary auth-submit" id="auth-register-submit" type="submit">Создать аккаунт</button>
       </form>
     </div>

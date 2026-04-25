@@ -56,6 +56,18 @@ function handleAchievementsError(error: unknown, fallbackCode: string) {
       return json({ ok: false, error: 'FORBIDDEN_WORKSPACE_ACCESS' }, 403);
     }
 
+    if (error.message === 'INSUFFICIENT_WORKSPACE_ROLE') {
+      return json({ ok: false, error: 'INSUFFICIENT_WORKSPACE_ROLE' }, 403);
+    }
+
+    if (
+      error.message === 'GROUP_NOT_FOUND' ||
+      error.message === 'PROJECT_NOT_FOUND' ||
+      error.message === 'PROJECT_GROUP_MISMATCH'
+    ) {
+      return json({ ok: false, error: error.message }, 400);
+    }
+
     return json(
       {
         ok: false,

@@ -1,7 +1,8 @@
 import { ZodError } from 'zod';
 
+import { markUserSeen } from '../../auth/activity.js';
+import { getCurrentSessionFromRequest } from '../../auth/current-user.js';
 import { getWorkspaceBootstrap } from './get-workspace-bootstrap.js';
-import { workspaceBootstrapQuerySchema } from './schema.js';
 
 function json(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -14,13 +15,20 @@ function json(data: unknown, status = 200) {
 
 export async function handleWorkspaceBootstrapRequest(request: Request) {
   try {
-    const url = new URL(request.url);
-    const parsedQuery = workspaceBootstrapQuerySchema.parse({
-      userId: url.searchParams.get('userId'),
-      workspaceId: url.searchParams.get('workspaceId'),
-    });
+    const session = await getCurrentSessionFromRequest(request);
 
-    const data = await getWorkspaceBootstrap(parsedQuery);
+    if (!session) {
+      return json(
+        {
+          ok: false,
+          error: 'UNAUTHORIZED',
+        },
+        401,
+      );
+    }
+
+    const data = await getWorkspaceBootstrap(session);
+    await markUserSeen(session.userId);
 
     return json({
       ok: true,
@@ -35,6 +43,16 @@ export async function handleWorkspaceBootstrapRequest(request: Request) {
           details: error.flatten(),
         },
         400,
+      );
+    }
+
+    if (error instanceof Error && error.message === 'UNAUTHORIZED') {
+      return json(
+        {
+          ok: false,
+          error: 'UNAUTHORIZED',
+        },
+        401,
       );
     }
 

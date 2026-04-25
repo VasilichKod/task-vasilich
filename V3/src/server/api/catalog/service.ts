@@ -1,5 +1,6 @@
 import type { Prisma } from '@prisma/client';
 
+import { requireWorkspaceAccess, requireWorkspaceMutationAccess } from '../../auth/workspace-access.js';
 import { prisma } from '../../db/client.js';
 
 const NO_GROUP_SYSTEM_KEY = 'NO_GROUP';
@@ -9,26 +10,6 @@ function addArchiveDeadline(date: Date) {
   const result = new Date(date);
   result.setDate(result.getDate() + ARCHIVE_RETENTION_DAYS);
   return result;
-}
-
-async function assertWorkspaceAccess(userId: string, workspaceId: string) {
-  const membership = await prisma.workspaceMember.findUnique({
-    where: {
-      workspaceId_userId: {
-        workspaceId,
-        userId,
-      },
-    },
-    select: {
-      role: true,
-    },
-  });
-
-  if (!membership) {
-    throw new Error('FORBIDDEN_WORKSPACE_ACCESS');
-  }
-
-  return membership;
 }
 
 async function ensureNoGroup(workspaceId: string, tx: Prisma.TransactionClient = prisma) {
@@ -68,7 +49,7 @@ async function ensureNoGroup(workspaceId: string, tx: Prisma.TransactionClient =
 }
 
 export async function getCatalog(userId: string, workspaceId: string) {
-  await assertWorkspaceAccess(userId, workspaceId);
+  await requireWorkspaceAccess(userId, workspaceId);
 
   const [groups, projects] = await Promise.all([
     prisma.group.findMany({
@@ -91,7 +72,7 @@ export async function getCatalog(userId: string, workspaceId: string) {
 }
 
 export async function getArchivedCatalog(userId: string, workspaceId: string) {
-  await assertWorkspaceAccess(userId, workspaceId);
+  await requireWorkspaceAccess(userId, workspaceId);
 
   const [groups, projects] = await Promise.all([
     prisma.group.findMany({
@@ -122,7 +103,7 @@ export async function createGroup(
   workspaceId: string,
   input: { name: string; color: string; sortOrder?: number },
 ) {
-  await assertWorkspaceAccess(userId, workspaceId);
+  await requireWorkspaceMutationAccess(userId, workspaceId);
 
   const lastGroup = await prisma.group.findFirst({
     where: { workspaceId },
@@ -146,7 +127,7 @@ export async function updateGroup(
   groupId: string,
   input: { name?: string; color?: string; sortOrder?: number },
 ) {
-  await assertWorkspaceAccess(userId, workspaceId);
+  await requireWorkspaceMutationAccess(userId, workspaceId);
 
   const group = await prisma.group.findFirst({
     where: {
@@ -176,7 +157,7 @@ export async function updateGroup(
 }
 
 export async function archiveGroup(userId: string, workspaceId: string, groupId: string) {
-  await assertWorkspaceAccess(userId, workspaceId);
+  await requireWorkspaceMutationAccess(userId, workspaceId);
 
   const group = await prisma.group.findFirst({
     where: {
@@ -263,7 +244,7 @@ export async function archiveGroup(userId: string, workspaceId: string, groupId:
 }
 
 export async function restoreGroup(userId: string, workspaceId: string, groupId: string) {
-  await assertWorkspaceAccess(userId, workspaceId);
+  await requireWorkspaceMutationAccess(userId, workspaceId);
 
   const group = await prisma.group.findFirst({
     where: {
@@ -292,7 +273,7 @@ export async function createProject(
   workspaceId: string,
   input: { groupId: string; name: string; color: string; sortOrder?: number },
 ) {
-  await assertWorkspaceAccess(userId, workspaceId);
+  await requireWorkspaceMutationAccess(userId, workspaceId);
 
   const group = await prisma.group.findFirst({
     where: {
@@ -332,7 +313,7 @@ export async function updateProject(
   projectId: string,
   input: { groupId?: string; name?: string; color?: string; sortOrder?: number },
 ) {
-  await assertWorkspaceAccess(userId, workspaceId);
+  await requireWorkspaceMutationAccess(userId, workspaceId);
 
   const project = await prisma.project.findFirst({
     where: {
@@ -392,7 +373,7 @@ export async function updateProject(
 }
 
 export async function archiveProject(userId: string, workspaceId: string, projectId: string) {
-  await assertWorkspaceAccess(userId, workspaceId);
+  await requireWorkspaceMutationAccess(userId, workspaceId);
 
   const project = await prisma.project.findFirst({
     where: {
@@ -502,7 +483,7 @@ export async function archiveProject(userId: string, workspaceId: string, projec
 }
 
 export async function restoreProject(userId: string, workspaceId: string, projectId: string) {
-  await assertWorkspaceAccess(userId, workspaceId);
+  await requireWorkspaceMutationAccess(userId, workspaceId);
 
   const project = await prisma.project.findFirst({
     where: {

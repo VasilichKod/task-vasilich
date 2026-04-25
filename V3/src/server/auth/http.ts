@@ -1,5 +1,6 @@
 import { ZodError } from 'zod';
 
+import { markUserSeen } from './activity.js';
 import { getCurrentUserFromRequest } from './current-user.js';
 import { loginUser } from './login.js';
 import { registerUser } from './register.js';
@@ -172,6 +173,8 @@ export async function handleCurrentUserRequest(request: Request) {
         401,
       );
     }
+
+    await markUserSeen(user.id);
 
     return json({
       ok: true,

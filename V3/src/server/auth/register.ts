@@ -42,6 +42,7 @@ async function ensureUniqueWorkspaceSlug(baseName: string) {
 
 export async function registerUser(input: RegisterInput) {
   const parsedInput = registerInputSchema.parse(input);
+  const now = new Date();
 
   const existingUser = await prisma.user.findUnique({
     where: {
@@ -64,6 +65,8 @@ export async function registerUser(input: RegisterInput) {
       data: {
         email: parsedInput.email,
         passwordHash,
+        lastLoginAt: now,
+        lastSeenAt: now,
         profile: {
           create: {
             name: parsedInput.name,

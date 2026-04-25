@@ -7,6 +7,7 @@ const COLORS = [
   '#7F77DD', '#D85A30', '#E24B4A', '#0F6E56',
   '#533489', '#888780'
 ];
+const HEX_COLOR_RE = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
 
 const DEFAULT_GROUPS = [
   { id: 'work', label: 'Работа', color: '#185FA5' },
@@ -76,6 +77,8 @@ let newGroupColor = COLORS[0];
 let _dayResize = null;
 let authMode = 'login';
 let currentUser = null;
+let adminStats = null;
+let adminStatsError = '';
 let _confirmMeta = null;
 let _sidebarDragMeta = null;
 let _planningSyncTimer = null;
@@ -292,7 +295,7 @@ function toCatalogGroups(groups) {
   return (groups || []).map(group => ({
     id: group.id,
     label: group.name,
-    color: group.color,
+    color: normalizeColor(group.color, COLORS[0]),
   }));
 }
 
@@ -301,7 +304,7 @@ function toCatalogProjects(projects) {
     id: project.id,
     label: project.name,
     group: project.groupId,
-    color: project.color,
+    color: normalizeColor(project.color, COLORS[0]),
   }));
 }
 
@@ -322,10 +325,43 @@ function switchAuthMode(mode) {
   document.getElementById('auth-tab-register').classList.toggle('active', mode === 'register');
   document.getElementById('auth-login-form').style.display = mode === 'login' ? 'flex' : 'none';
   document.getElementById('auth-register-form').style.display = mode === 'register' ? 'flex' : 'none';
+  resetAuthPasswordVisibility();
   setAuthError('');
 }
 
+function togglePasswordVisibility(inputId, button) {
+  const input = document.getElementById(inputId);
+  if (!input || !button) return;
+
+  const nextType = input.type === 'password' ? 'text' : 'password';
+  const isVisible = nextType === 'text';
+  input.type = nextType;
+  button.textContent = isVisible ? 'Скрыть' : 'Показать';
+  button.classList.toggle('active', isVisible);
+  button.setAttribute('aria-pressed', String(isVisible));
+  button.setAttribute('aria-label', isVisible ? 'Скрыть пароль' : 'Показать пароль');
+}
+
+function resetAuthPasswordVisibility() {
+  [
+    ['login-password', 'auth-login-form'],
+    ['register-password', 'auth-register-form'],
+  ].forEach(([inputId, formId]) => {
+    const input = document.getElementById(inputId);
+    const button = document.querySelector(`#${formId} .password-toggle`);
+    if (!input || !button) return;
+    input.type = 'password';
+    button.textContent = 'Показать';
+    button.classList.remove('active');
+    button.setAttribute('aria-pressed', 'false');
+    button.setAttribute('aria-label', 'Показать пароль');
+  });
+}
+
 function showAuthShell() {
+  adminStats = null;
+  adminStatsError = '';
+  resetAuthPasswordVisibility();
   document.getElementById('auth-shell').style.display = 'grid';
   document.getElementById('app').style.display = 'none';
 }
@@ -410,18 +446,22 @@ async function fetchAccountFromServer() {
   });
 }
 
+async function fetchAdminStatsFromServer() {
+  return apiJson('/api/admin/stats', {
+    method: 'GET',
+    headers: {},
+  });
+}
+
 async function fetchBootstrapFromServer() {
-  if (!currentUser?.id || !currentUser?.workspace?.id) {
+  if (!currentUser?.workspace?.id) {
     throw new Error('BOOTSTRAP_SESSION_MISSING');
   }
 
-  return apiJson(
-    `/api/bootstrap?userId=${encodeURIComponent(currentUser.id)}&workspaceId=${encodeURIComponent(currentUser.workspace.id)}`,
-    {
-      method: 'GET',
-      headers: {},
-    },
-  );
+  return apiJson('/api/bootstrap', {
+    method: 'GET',
+    headers: {},
+  });
 }
 
 async function syncAccountFromServer() {
@@ -429,6 +469,39 @@ async function syncAccountFromServer() {
   applyAccountPayload(account);
   save();
   return account;
+}
+
+async function loadAdminStats(options = {}) {
+  const { silent = false } = options;
+
+  if (!currentUser) {
+    adminStats = null;
+    adminStatsError = '';
+    return null;
+  }
+
+  try {
+    adminStats = await fetchAdminStatsFromServer();
+    adminStatsError = '';
+    return adminStats;
+  } catch (error) {
+    const code = error instanceof Error ? error.message : 'GET_ADMIN_STATS_FAILED';
+
+    if (code === 'FORBIDDEN_ADMIN_ACCESS' || code === 'UNAUTHORIZED') {
+      adminStats = null;
+      adminStatsError = '';
+      return null;
+    }
+
+    adminStats = null;
+    adminStatsError = 'Не удалось обновить статистику.';
+
+    if (!silent) {
+      console.error(error);
+    }
+
+    return null;
+  }
 }
 
 function buildAchievementsPayload() {
@@ -818,6 +891,7 @@ async function submitLogin(event) {
     await syncCatalogFromServer();
     await syncAccountFromServer();
     await syncPlanningFromServer();
+    await loadAdminStats({ silent: true });
     state.currentView = state.settings.defaultView || 'graph';
     save();
     renderSidebarLists();
@@ -873,6 +947,7 @@ async function submitRegister(event) {
     await syncCatalogFromServer();
     await syncAccountFromServer();
     await syncPlanningFromServer();
+    await loadAdminStats({ silent: true });
     state.currentView = state.settings.defaultView || 'graph';
     save();
     renderSidebarLists();
@@ -909,6 +984,11 @@ function taskId() {
   return `task_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
+function normalizeColor(value, fallback) {
+  const candidate = typeof value === 'string' ? value.trim() : '';
+  return HEX_COLOR_RE.test(candidate) ? candidate : fallback;
+}
+
 function makeTask(task) {
   if (typeof task === 'string') return { id: taskId(), text: task, done: false, note: '' };
   return {
@@ -924,7 +1004,7 @@ function normalizeGroups(groups) {
   return source.map((group, index) => ({
     id: group.id || `group_${index}_${Date.now()}`,
     label: group.label || `Группа ${index + 1}`,
-    color: group.color || COLORS[index % COLORS.length],
+    color: normalizeColor(group.color, COLORS[index % COLORS.length]),
   }));
 }
 
@@ -934,7 +1014,7 @@ function normalizeSubs(subs, groups) {
     id: sub.id || `sub_${index}_${Date.now()}`,
     label: sub.label || `Проект ${index + 1}`,
     group: groups.some(group => group.id === sub.group) ? sub.group : fallbackGroupId,
-    color: sub.color || COLORS[index % COLORS.length],
+    color: normalizeColor(sub.color, COLORS[index % COLORS.length]),
   }));
 }
 
@@ -1337,6 +1417,29 @@ function escapeHtml(value) {
     .replaceAll("'", '&#39;');
 }
 
+function inlineToken(value) {
+  return encodeURIComponent(String(value ?? ''));
+}
+
+function decodeInlineToken(value) {
+  return decodeURIComponent(String(value ?? ''));
+}
+
+function formatAdminDate(value) {
+  if (!value) return '—';
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '—';
+
+  return new Intl.DateTimeFormat('ru-RU', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(date);
+}
+
 function getGroup(groupId) {
   return state.groups.find(group => group.id === groupId);
 }
@@ -1725,11 +1828,11 @@ function renderSidebarLists() {
     <div
       class="sidebar-item-row"
       draggable="true"
-      ondragstart="dragSidebarItem(event, 'group', '${group.id}')"
+      ondragstart="dragSidebarItem(event, 'group', decodeInlineToken('${inlineToken(group.id)}'))"
       ondragover="allowSidebarItemDrop(event)"
-      ondrop="dropSidebarItem(event, 'group', '${group.id}')"
+      ondrop="dropSidebarItem(event, 'group', decodeInlineToken('${inlineToken(group.id)}'))"
     >
-      <button class="sidebar-item-main" type="button" onclick="openGroupManage('${group.id}')">
+      <button class="sidebar-item-main" type="button" onclick="openGroupManage(decodeInlineToken('${inlineToken(group.id)}'))">
         <span class="sidebar-project-dot" style="background:${group.color}"></span>
         <span>${escapeHtml(group.label)}</span>
       </button>
@@ -1746,11 +1849,11 @@ function renderSidebarLists() {
     <div
       class="sidebar-item-row"
       draggable="true"
-      ondragstart="dragSidebarItem(event, 'project', '${project.id}')"
+      ondragstart="dragSidebarItem(event, 'project', decodeInlineToken('${inlineToken(project.id)}'))"
       ondragover="allowSidebarItemDrop(event)"
-      ondrop="dropSidebarItem(event, 'project', '${project.id}')"
+      ondrop="dropSidebarItem(event, 'project', decodeInlineToken('${inlineToken(project.id)}'))"
     >
-      <button class="sidebar-item-main" type="button" onclick="openManage('${project.id}')">
+      <button class="sidebar-item-main" type="button" onclick="openManage(decodeInlineToken('${inlineToken(project.id)}'))">
         <span class="sidebar-project-dot" style="background:${project.color}"></span>
         <span>${escapeHtml(project.label)}</span>
       </button>
@@ -1888,29 +1991,29 @@ function renderBoard() {
     DAYS.forEach((day, dayIdx) => {
       const projectIds = getDayProjects(wk, group.id, dayIdx);
       const width = getDayColumnWidth(dayIdx);
-      html += `<td class="day-cell" style="width:${width}px;min-width:${width}px;max-width:${width}px" ondragover="allowProjectDrop(event)" ondragleave="leaveDayCell(event)" ondrop="dropProject(event, '${group.id}', ${dayIdx})"><div class="day-stack">`;
+      html += `<td class="day-cell" style="width:${width}px;min-width:${width}px;max-width:${width}px" ondragover="allowProjectDrop(event)" ondragleave="leaveDayCell(event)" ondrop="dropProject(event, decodeInlineToken('${inlineToken(group.id)}'), ${dayIdx})"><div class="day-stack">`;
 
       projectIds.forEach(subId => {
         const project = getSub(subId);
         if (!project) return;
         const tasks = getDisplayTasksForCell(wk, subId, dayIdx);
-        html += `<div class="project-card" style="--project-line:${project.color}" draggable="true" ondragstart="dragProject(event, '${group.id}', ${dayIdx}, '${subId}')" ondragover="allowProjectDrop(event)" ondrop="dropProjectOnCard(event, '${group.id}', ${dayIdx}, '${subId}')">
+        html += `<div class="project-card" style="--project-line:${project.color}" draggable="true" ondragstart="dragProject(event, decodeInlineToken('${inlineToken(group.id)}'), ${dayIdx}, decodeInlineToken('${inlineToken(subId)}'))" ondragover="allowProjectDrop(event)" ondrop="dropProjectOnCard(event, decodeInlineToken('${inlineToken(group.id)}'), ${dayIdx}, decodeInlineToken('${inlineToken(subId)}'))">
           <div class="project-card-head">
             <div class="project-title">${escapeHtml(project.label)}</div>
-            <button class="project-remove-btn" type="button" onclick="removeProjectFromDay('${group.id}', ${dayIdx}, '${subId}')">×</button>
+            <button class="project-remove-btn" type="button" onclick="removeProjectFromDay(decodeInlineToken('${inlineToken(group.id)}'), ${dayIdx}, decodeInlineToken('${inlineToken(subId)}'))">×</button>
           </div>
-          <div class="task-list" ondragover="allowDrop(event)" ondrop="dropTask(event, '${subId}', ${dayIdx})">`;
+          <div class="task-list" ondragover="allowDrop(event)" ondrop="dropTask(event, decodeInlineToken('${inlineToken(subId)}'), ${dayIdx})">`;
 
         tasks.forEach(task => {
           const noteBadge = task.note?.trim()
-            ? `<button class="note-badge" type="button" onclick="openTaskDetailsById(event, '${task.id}')">📝</button>`
+            ? `<button class="note-badge" type="button" onclick="openTaskDetailsById(event, decodeInlineToken('${inlineToken(task.id)}'))">📝</button>`
             : '';
           const action = task.recurring
             ? '<span class="task-icon" title="Постоянная задача">∞</span>'
             : '';
-          html += `<div class="task-item${task.done ? ' done' : ''}" ${task.recurring ? '' : `draggable="true" ondragstart="dragTask(event, '${task.id}')"`}>
-            <input type="checkbox" ${task.done ? 'checked' : ''} onchange="toggleById('${task.id}')">
-            <button class="task-text" type="button" onclick="openTaskDetailsById(event, '${task.id}')">${escapeHtml(task.text)}</button>
+          html += `<div class="task-item${task.done ? ' done' : ''}" ${task.recurring ? '' : `draggable="true" ondragstart="dragTask(event, decodeInlineToken('${inlineToken(task.id)}'))"`}>
+            <input type="checkbox" ${task.done ? 'checked' : ''} onchange="toggleById(decodeInlineToken('${inlineToken(task.id)}'))">
+            <button class="task-text" type="button" onclick="openTaskDetailsById(event, decodeInlineToken('${inlineToken(task.id)}'))">${escapeHtml(task.text)}</button>
             ${noteBadge || action ? `<div class="task-tools">${noteBadge}${action}</div>` : ''}
           </div>`;
         });
@@ -1928,7 +2031,7 @@ function renderBoard() {
             <span class="task-inline-arrow">↵</span>
           </div>`;
         } else {
-          html += `<button class="task-entry-trigger" type="button" onclick="openInlineTask('${subId}', ${dayIdx})"></button>`;
+          html += `<button class="task-entry-trigger" type="button" onclick="openInlineTask(decodeInlineToken('${inlineToken(subId)}'), ${dayIdx})"></button>`;
         }
 
         html += `</div></div>`;
@@ -1951,22 +2054,22 @@ function renderTasksView() {
         <div class="tasks-group-head">
           <div class="tasks-group-title" style="color:${group.color}">${escapeHtml(group.label)}</div>
         </div>
-        <div class="tasks-project-grid" ondragover="allowTasksGridDrop(event)" ondrop="dropProjectOnTasksGrid(event, '${group.id}')" ondragleave="leaveTasksGrid(event)">
+        <div class="tasks-project-grid" ondragover="allowTasksGridDrop(event)" ondrop="dropProjectOnTasksGrid(event, decodeInlineToken('${inlineToken(group.id)}'))" ondragleave="leaveTasksGrid(event)">
           ${projects.map(project => {
             const rawTasks = getBacklogForProject(project.id);
             const tasks = [...rawTasks.filter(t => !t.done), ...rawTasks.filter(t => t.done)];
             return `
-              <article class="tasks-project-card" style="--project-line:${project.color}" draggable="true" ondragstart="dragTasksCard(event, '${group.id}', '${project.id}')" ondragover="allowTasksCardDrop(event)" ondrop="dropProjectOnTasksCard(event, '${group.id}', '${project.id}')" ondragleave="leaveTasksCard(event)">
+              <article class="tasks-project-card" style="--project-line:${project.color}" draggable="true" ondragstart="dragTasksCard(event, decodeInlineToken('${inlineToken(group.id)}'), decodeInlineToken('${inlineToken(project.id)}'))" ondragover="allowTasksCardDrop(event)" ondrop="dropProjectOnTasksCard(event, decodeInlineToken('${inlineToken(group.id)}'), decodeInlineToken('${inlineToken(project.id)}'))" ondragleave="leaveTasksCard(event)">
                 <div class="tasks-project-head">
                   <div class="tasks-project-title">${escapeHtml(project.label)}</div>
-                  <button class="tasks-project-remove" type="button" onclick="removeProjectFromTasks('${group.id}', '${project.id}')" title="Убрать проект из страницы задач">×</button>
+                  <button class="tasks-project-remove" type="button" onclick="removeProjectFromTasks(decodeInlineToken('${inlineToken(group.id)}'), decodeInlineToken('${inlineToken(project.id)}'))" title="Убрать проект из страницы задач">×</button>
                 </div>
                 <div class="tasks-project-list">
                   ${tasks.length ? tasks.map(task => `
                     <div class="task-item task-item-backlog${task.done ? ' done' : ''}">
-                      <input type="checkbox" ${task.done ? 'checked' : ''} onchange="toggleById('${task.id}')">
-                      <button class="task-text" type="button" onclick="openTaskDetailsById(event, '${task.id}')">${escapeHtml(task.text)}</button>
-                      ${task.note?.trim() ? `<div class="task-tools"><button class="note-badge" type="button" onclick="openTaskDetailsById(event, '${task.id}')">📝</button></div>` : ''}
+                      <input type="checkbox" ${task.done ? 'checked' : ''} onchange="toggleById(decodeInlineToken('${inlineToken(task.id)}'))">
+                      <button class="task-text" type="button" onclick="openTaskDetailsById(event, decodeInlineToken('${inlineToken(task.id)}'))">${escapeHtml(task.text)}</button>
+                      ${task.note?.trim() ? `<div class="task-tools"><button class="note-badge" type="button" onclick="openTaskDetailsById(event, decodeInlineToken('${inlineToken(task.id)}'))">📝</button></div>` : ''}
                     </div>
                   `).join('') : ''}
                   ${_inlineBacklogMeta && _inlineBacklogMeta.subId === project.id ? `
@@ -1980,7 +2083,7 @@ function renderTasksView() {
                         onblur="handleInlineBacklogBlur()"
                       >
                     </div>
-                  ` : `<button class="task-entry-trigger" type="button" onclick="openInlineBacklogTask('${project.id}')"></button>`}
+                  ` : `<button class="task-entry-trigger" type="button" onclick="openInlineBacklogTask(decodeInlineToken('${inlineToken(project.id)}'))"></button>`}
                 </div>
               </article>
             `;
@@ -2047,16 +2150,16 @@ function renderWinsView() {
                       <article class="wins-project-card" style="--project-line:${project.color}">
                         <div class="wins-project-head">
                           <div class="wins-project-title">${escapeHtml(project.label)}</div>
-                          <button class="wins-project-remove" type="button" onclick="removeProjectFromWins('${year}', '${group.id}', '${project.id}')" title="Убрать проект из достижений">×</button>
+                          <button class="wins-project-remove" type="button" onclick="removeProjectFromWins('${year}', decodeInlineToken('${inlineToken(group.id)}'), decodeInlineToken('${inlineToken(project.id)}'))" title="Убрать проект из достижений">×</button>
                         </div>
                         <div class="wins-project-list">
                           ${items.map(item => `
-                            <button class="wins-item" type="button" onclick="openAchievementModal('${item.id}')">
+                            <button class="wins-item" type="button" onclick="openAchievementModal(decodeInlineToken('${inlineToken(item.id)}'))">
                               <span class="wins-item-text">${escapeHtml(item.text)}</span>
                               <span class="wins-item-date">${escapeHtml(formatAchievementDate(item.date))}</span>
                             </button>
                           `).join('')}
-                          <button class="task-entry-trigger wins-add-trigger" type="button" onclick="openAchievementModalForProject('${year}', '${project.id}')"></button>
+                          <button class="task-entry-trigger wins-add-trigger" type="button" onclick="openAchievementModalForProject('${year}', decodeInlineToken('${inlineToken(project.id)}'))"></button>
                         </div>
                       </article>
                     `;
@@ -2163,7 +2266,7 @@ function renderProfileView() {
                   <div class="archive-text">
                     <span class="archive-name">${escapeHtml(group.label)}</span>
                   </div>
-                  <button type="button" onclick="restoreArchivedGroup('${group.id}')">Восстановить</button>
+                  <button type="button" onclick="restoreArchivedGroup(decodeInlineToken('${inlineToken(group.id)}'))">Восстановить</button>
                 </div>
               `).join('') : '<div class="empty-note compact">Архивных групп пока нет.</div>'}
             </div>
@@ -2174,7 +2277,7 @@ function renderProfileView() {
                   <div class="archive-text">
                     <span class="archive-name">${escapeHtml(project.label)}</span>
                   </div>
-                  <button type="button" onclick="restoreArchivedProject('${project.id}')">Восстановить</button>
+                  <button type="button" onclick="restoreArchivedProject(decodeInlineToken('${inlineToken(project.id)}'))">Восстановить</button>
                 </div>
               `).join('') : '<div class="empty-note compact">Архивных проектов пока нет.</div>'}
             </div>
@@ -2186,6 +2289,9 @@ function renderProfileView() {
 }
 
 function renderSettingsView() {
+  const summary = adminStats?.summary || null;
+  const recentUsers = adminStats?.recentUsers || [];
+
   document.getElementById('settings-view').innerHTML = `
     <div class="account-shell">
       <section class="settings-card account-hero account-hero-settings">
@@ -2260,10 +2366,87 @@ function renderSettingsView() {
               <b>Локальная версия уже есть</b>
             </div>
           </section>
+
+          ${summary || adminStatsError ? `
+            <section class="settings-card">
+              <div class="settings-card-title">Статистика пользователей</div>
+              ${adminStatsError ? `<div class="settings-copy">${escapeHtml(adminStatsError)}</div>` : ''}
+              ${summary ? `
+                <div class="settings-info-row">
+                  <span>Всего регистраций</span>
+                  <b>${summary.totalUsers}</b>
+                </div>
+                <div class="settings-info-row">
+                  <span>Активных аккаунтов</span>
+                  <b>${summary.activeUsers}</b>
+                </div>
+                <div class="settings-info-row">
+                  <span>С workspace</span>
+                  <b>${summary.usersWithWorkspace}</b>
+                </div>
+                <div class="settings-info-row">
+                  <span>Логинились хотя бы раз</span>
+                  <b>${summary.usersLoggedInEver}</b>
+                </div>
+                <div class="settings-info-row">
+                  <span>Заходили за 7 дней</span>
+                  <b>${summary.usersSeen7d}</b>
+                </div>
+                <div class="settings-info-row">
+                  <span>Заходили за 30 дней</span>
+                  <b>${summary.usersSeen30d}</b>
+                </div>
+                <div class="settings-info-row">
+                  <span>Новых за 7 дней</span>
+                  <b>${summary.newUsers7d}</b>
+                </div>
+                <div class="settings-info-row">
+                  <span>Новых за 30 дней</span>
+                  <b>${summary.newUsers30d}</b>
+                </div>
+                <div class="settings-copy" style="margin-top:12px;">Последние регистрации</div>
+                ${recentUsers.length ? recentUsers.map(user => `
+                  <div class="archive-row">
+                    <div class="archive-text">
+                      <span class="archive-name">${escapeHtml(user.email)}</span>
+                      <span class="profile-meta">Регистрация: ${escapeHtml(formatAdminDate(user.createdAt))}</span>
+                      <span class="profile-meta">Логин: ${escapeHtml(formatAdminDate(user.lastLoginAt))}</span>
+                      <span class="profile-meta">Последняя активность: ${escapeHtml(formatAdminDate(user.lastSeenAt))}</span>
+                    </div>
+                  </div>
+                `).join('') : '<div class="empty-note compact">Пользователей пока нет.</div>'}
+              ` : ''}
+              <div class="modal-actions modal-actions-right">
+                <button id="admin-stats-refresh-btn" type="button" onclick="refreshAdminStats()">Обновить статистику</button>
+              </div>
+            </section>
+          ` : ''}
         </div>
       </div>
     </div>
   `;
+}
+
+async function refreshAdminStats() {
+  const button = document.getElementById('admin-stats-refresh-btn');
+  const originalText = button?.textContent || 'Обновить статистику';
+
+  try {
+    if (button) {
+      button.disabled = true;
+      button.textContent = 'Обновляем...';
+    }
+
+    await loadAdminStats();
+    renderSettingsView();
+  } catch (error) {
+    console.error(error);
+  } finally {
+    if (button) {
+      button.disabled = false;
+      button.textContent = originalText;
+    }
+  }
 }
 
 async function saveProfile() {
@@ -2498,7 +2681,7 @@ function renderAchievementProjectOptions() {
   const groupId = document.getElementById('achievement-group-select').value;
   const projects = state.subs.filter(sub => sub.group === groupId);
   const select = document.getElementById('achievement-project-select');
-  select.innerHTML = projects.map(project => `<option value="${project.id}">${escapeHtml(project.label)}</option>`).join('');
+  select.innerHTML = projects.map(project => `<option value="${escapeHtml(project.id)}">${escapeHtml(project.label)}</option>`).join('');
 }
 
 function openAchievementModalForProject(year, subId) {
@@ -2512,7 +2695,7 @@ function openAchievementModal(achievementId = null, presetYear = null, presetSub
   const years = Array.from(new Set([...getAchievementYears(), currentYear])).sort((a, b) => Number(b) - Number(a));
   document.getElementById('achievement-year-select').innerHTML = years.map(year => `<option value="${year}">${year}</option>`).join('');
   document.getElementById('achievement-group-select').innerHTML = state.groups.map(group =>
-    `<option value="${group.id}">${escapeHtml(group.label)}</option>`
+    `<option value="${escapeHtml(group.id)}">${escapeHtml(group.label)}</option>`
   ).join('');
 
   const project = record ? getSub(record.subId) : (presetSubId ? getSub(presetSubId) : state.subs[0]);
@@ -2931,7 +3114,7 @@ function renderCreateTaskOptions() {
   const projects = state.subs.filter(sub => sub.group === groupId);
   const projectSelect = document.getElementById('create-task-project-select');
   projectSelect.innerHTML = projects.map(project =>
-    `<option value="${project.id}">${escapeHtml(project.label)}</option>`
+    `<option value="${escapeHtml(project.id)}">${escapeHtml(project.label)}</option>`
   ).join('');
   if (projects.length) {
     projectSelect.value = projects.some(project => project.id === _createTaskMeta.subId) ? _createTaskMeta.subId : projects[0].id;
@@ -2950,7 +3133,7 @@ function openCreateTaskModal(mode = 'week', groupId = null, dayIdx = null, subId
     subId: subId || '',
   };
   document.getElementById('create-task-group-select').innerHTML = state.groups.map(group =>
-    `<option value="${group.id}">${escapeHtml(group.label)}</option>`
+    `<option value="${escapeHtml(group.id)}">${escapeHtml(group.label)}</option>`
   ).join('');
   document.getElementById('create-task-group-select').value = _createTaskMeta.groupId;
   document.getElementById('create-task-day-select').innerHTML = DAYS.map((day, index) =>
@@ -3028,7 +3211,7 @@ function renderDayProjectOptions() {
   dayGroup.style.display = _dayProjectMeta.mode === 'week' ? 'flex' : 'none';
   document.getElementById('day-project-year-group').style.display = _dayProjectMeta.mode === 'wins' ? 'flex' : 'none';
   document.getElementById('day-project-select').innerHTML = available.map(project =>
-    `<option value="${project.id}">${escapeHtml(project.label)}</option>`
+    `<option value="${escapeHtml(project.id)}">${escapeHtml(project.label)}</option>`
   ).join('');
   document.getElementById('day-project-empty').style.display = available.length ? 'none' : 'block';
   document.getElementById('day-project-select').style.display = available.length ? 'block' : 'none';
@@ -3045,7 +3228,7 @@ function openDayProjectModal(modeOrGroupId = null, dayIdx = null) {
   _dayProjectMeta = { mode, groupId: initialGroupId, dayIdx: initialDayIdx, wk, year: state.winsYearFilter === 'all' ? String(new Date().getFullYear()) : state.winsYearFilter };
 
   document.getElementById('day-project-group-select').innerHTML = state.groups.map(group =>
-    `<option value="${group.id}">${escapeHtml(group.label)}</option>`
+    `<option value="${escapeHtml(group.id)}">${escapeHtml(group.label)}</option>`
   ).join('');
   document.getElementById('day-project-group-select').value = initialGroupId;
   document.getElementById('day-project-year-select').innerHTML = getAchievementYears().map(year =>
@@ -3126,8 +3309,8 @@ function renderProjectTemplateBoard() {
       <div class="project-template-group-title">
         <div class="project-template-group-name" style="color:${group.color}">${escapeHtml(group.label)}</div>
         <div class="project-template-actions">
-          <button class="project-template-action" type="button" onclick="setGroupProjectTemplate('${group.id}', true)">Добавить всё</button>
-          <button class="project-template-action" type="button" onclick="setGroupProjectTemplate('${group.id}', false)">Убрать всё</button>
+          <button class="project-template-action" type="button" onclick="setGroupProjectTemplate(decodeInlineToken('${inlineToken(group.id)}'), true)">Добавить всё</button>
+          <button class="project-template-action" type="button" onclick="setGroupProjectTemplate(decodeInlineToken('${inlineToken(group.id)}'), false)">Убрать всё</button>
         </div>
       </div>
       <div class="project-template-grid">
@@ -3140,8 +3323,8 @@ function renderProjectTemplateBoard() {
               <span>${escapeHtml(sub.label)}</span>
             </div>
             <div class="project-template-row-actions">
-              <button class="project-template-row-btn" type="button" onclick="setProjectTemplateDays('${group.id}', '${sub.id}', true)">Всё</button>
-              <button class="project-template-row-btn" type="button" onclick="setProjectTemplateDays('${group.id}', '${sub.id}', false)">Снять</button>
+              <button class="project-template-row-btn" type="button" onclick="setProjectTemplateDays(decodeInlineToken('${inlineToken(group.id)}'), decodeInlineToken('${inlineToken(sub.id)}'), true)">Всё</button>
+              <button class="project-template-row-btn" type="button" onclick="setProjectTemplateDays(decodeInlineToken('${inlineToken(group.id)}'), decodeInlineToken('${inlineToken(sub.id)}'), false)">Снять</button>
             </div>
           </div>
           ${DAYS.map((_, dayIdx) => `
@@ -3149,7 +3332,7 @@ function renderProjectTemplateBoard() {
               <input
                 type="checkbox"
                 ${state.projectTemplates[group.id][dayIdx].includes(sub.id) ? 'checked' : ''}
-                onchange="toggleProjectTemplate('${group.id}', ${dayIdx}, '${sub.id}', this.checked)"
+                onchange="toggleProjectTemplate(decodeInlineToken('${inlineToken(group.id)}'), ${dayIdx}, decodeInlineToken('${inlineToken(sub.id)}'), this.checked)"
               >
             </label>
           `).join('')}
@@ -3221,7 +3404,7 @@ function closeRecurringManage() {
 
 function renderRecurringProjectOptions() {
   document.getElementById('recurring-project-select').innerHTML = state.subs.map(project =>
-    `<option value="${project.id}">${escapeHtml(project.label)}</option>`
+    `<option value="${escapeHtml(project.id)}">${escapeHtml(project.label)}</option>`
   ).join('');
 }
 
@@ -3229,7 +3412,7 @@ function renderRecurringFilters() {
   const groupSelect = document.getElementById('recurring-filter-group');
   const projectSelect = document.getElementById('recurring-filter-project');
   groupSelect.innerHTML = ['<option value="all">Все группы</option>', ...state.groups.map(group =>
-    `<option value="${group.id}">${escapeHtml(group.label)}</option>`
+    `<option value="${escapeHtml(group.id)}">${escapeHtml(group.label)}</option>`
   )].join('');
   groupSelect.value = state.recurringFilterGroup;
 
@@ -3240,7 +3423,7 @@ function renderRecurringFilters() {
     state.recurringFilterProject = 'all';
   }
   projectSelect.innerHTML = ['<option value="all">Все проекты</option>', ...projects.map(project =>
-    `<option value="${project.id}">${escapeHtml(project.label)}</option>`
+    `<option value="${escapeHtml(project.id)}">${escapeHtml(project.label)}</option>`
   )].join('');
   projectSelect.value = state.recurringFilterProject;
 }
@@ -3256,7 +3439,7 @@ function renderRecurringList() {
     ? filtered.map(item => {
       const project = getSub(item.subId);
       const group = getGroup(project?.group);
-      return `<button class="recurring-row${manageRecurringId === item.id ? ' active' : ''}" type="button" onclick="startRecurringEdit('${item.id}')">
+      return `<button class="recurring-row${manageRecurringId === item.id ? ' active' : ''}" type="button" onclick="startRecurringEdit(decodeInlineToken('${inlineToken(item.id)}'))">
         <span class="recurring-row-title">${escapeHtml(item.text)}</span>
         <span class="recurring-row-meta">${DAYS[item.dayIdx]} · ${escapeHtml(project?.label || 'Проект')} · ${escapeHtml(group?.label || 'Группа')}</span>
       </button>`;
@@ -3464,7 +3647,7 @@ function closeManage() {
 
 function renderProjectGroupOptions() {
   const select = document.getElementById('proj-group-select');
-  select.innerHTML = state.groups.map(group => `<option value="${group.id}">${escapeHtml(group.label)}</option>`).join('');
+  select.innerHTML = state.groups.map(group => `<option value="${escapeHtml(group.id)}">${escapeHtml(group.label)}</option>`).join('');
   select.value = newProjGroup;
 }
 
@@ -4084,6 +4267,7 @@ async function initApp() {
     await syncCatalogFromServer();
     await syncAccountFromServer();
     await syncPlanningFromServer();
+    await loadAdminStats({ silent: true });
     state.currentView = state.settings.defaultView || state.currentView;
     renderSidebarLists();
     renderCurrentView();

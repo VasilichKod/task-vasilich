@@ -56,8 +56,21 @@ function handlePlanningError(error: unknown, fallbackCode: string) {
       return json({ ok: false, error: 'FORBIDDEN_WORKSPACE_ACCESS' }, 403);
     }
 
+    if (error.message === 'INSUFFICIENT_WORKSPACE_ROLE') {
+      return json({ ok: false, error: 'INSUFFICIENT_WORKSPACE_ROLE' }, 403);
+    }
+
     if (error.message === 'PLANNING_VERSION_CONFLICT') {
       return json({ ok: false, error: 'PLANNING_VERSION_CONFLICT' }, 409);
+    }
+
+    if (
+      error.message === 'GROUP_NOT_FOUND' ||
+      error.message === 'PROJECT_NOT_FOUND' ||
+      error.message === 'PROJECT_GROUP_MISMATCH' ||
+      error.message === 'INVALID_RECURRING_TASK_REFERENCE'
+    ) {
+      return json({ ok: false, error: error.message }, 400);
     }
 
     return json(

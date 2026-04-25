@@ -1,27 +1,8 @@
 import type { Prisma } from '@prisma/client';
 
+import { requireWorkspaceMutationAccess } from '../../auth/workspace-access.js';
 import { prisma } from '../../db/client.js';
 import type { AchievementsStateInput } from './schema.js';
-
-async function assertWorkspaceAccess(userId: string, workspaceId: string) {
-  const membership = await prisma.workspaceMember.findUnique({
-    where: {
-      workspaceId_userId: {
-        workspaceId,
-        userId,
-      },
-    },
-    select: {
-      role: true,
-    },
-  });
-
-  if (!membership) {
-    throw new Error('FORBIDDEN_WORKSPACE_ACCESS');
-  }
-
-  return membership;
-}
 
 async function getProjectSnapshots(workspaceId: string, tx: Prisma.TransactionClient = prisma) {
   const [projects, groups] = await Promise.all([
@@ -54,11 +35,86 @@ async function getProjectSnapshots(workspaceId: string, tx: Prisma.TransactionCl
   );
 }
 
+async function loadWorkspaceAchievementState(
+  workspaceId: string,
+  tx: Prisma.TransactionClient,
+) {
+  const [groups, projects] = await Promise.all([
+    tx.group.findMany({
+      where: {
+        workspaceId,
+        archivedAt: null,
+      },
+      select: {
+        id: true,
+      },
+    }),
+    tx.project.findMany({
+      where: {
+        workspaceId,
+        archivedAt: null,
+      },
+      select: {
+        id: true,
+        groupId: true,
+      },
+    }),
+  ]);
+
+  return {
+    groupIds: new Set(groups.map(group => group.id)),
+    projectGroupMap: new Map(projects.map(project => [project.id, project.groupId])),
+  };
+}
+
+async function validateAchievementsStateReferences(
+  tx: Prisma.TransactionClient,
+  workspaceId: string,
+  input: AchievementsStateInput,
+) {
+  const { groupIds, projectGroupMap } = await loadWorkspaceAchievementState(workspaceId, tx);
+  const projectIds = new Set(projectGroupMap.keys());
+
+  const assertKnownGroup = (groupId: string) => {
+    if (!groupIds.has(groupId)) {
+      throw new Error('GROUP_NOT_FOUND');
+    }
+  };
+
+  const assertKnownProject = (projectId: string) => {
+    if (!projectIds.has(projectId)) {
+      throw new Error('PROJECT_NOT_FOUND');
+    }
+  };
+
+  const assertProjectBelongsToGroup = (groupId: string, projectId: string) => {
+    assertKnownGroup(groupId);
+    assertKnownProject(projectId);
+
+    if (projectGroupMap.get(projectId) !== groupId) {
+      throw new Error('PROJECT_GROUP_MISMATCH');
+    }
+  };
+
+  Object.values(input.achievements).forEach(projectMap => {
+    Object.keys(projectMap).forEach(assertKnownProject);
+  });
+
+  Object.values(input.achievementProjects).forEach(groupMap => {
+    Object.entries(groupMap).forEach(([groupId, groupedProjectIds]) => {
+      assertKnownGroup(groupId);
+      groupedProjectIds.forEach(projectId => assertProjectBelongsToGroup(groupId, projectId));
+    });
+  });
+}
+
 async function replaceAchievementsState(
   tx: Prisma.TransactionClient,
   workspaceId: string,
   input: AchievementsStateInput,
 ) {
+  await validateAchievementsStateReferences(tx, workspaceId, input);
+
   await tx.achievement.deleteMany({ where: { workspaceId } });
   await tx.achievementPageProject.deleteMany({ where: { workspaceId } });
   await tx.achievementYear.deleteMany({ where: { workspaceId } });
@@ -121,7 +177,7 @@ async function replaceAchievementsState(
 }
 
 export async function saveAchievementsState(userId: string, workspaceId: string, input: AchievementsStateInput) {
-  await assertWorkspaceAccess(userId, workspaceId);
+  await requireWorkspaceMutationAccess(userId, workspaceId);
 
   await prisma.$transaction(async tx => {
     await replaceAchievementsState(tx, workspaceId, input);
