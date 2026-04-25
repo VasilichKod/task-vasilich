@@ -1904,6 +1904,7 @@ function renderCurrentView() {
   weekNav.style.display = 'none';
   pageTitle.style.display = 'block';
   statsBar.style.display = 'none';
+  pageTitle.classList.remove('page-title-with-tabs');
 
   if (state.currentView === 'tasks') {
     pageTitle.textContent = 'Задачи';
@@ -1943,7 +1944,7 @@ function renderCurrentView() {
   }
 
   if (state.currentView === 'settings') {
-    pageTitle.textContent = 'Настройки';
+    renderSettingsPageTitle();
     createBtn.style.display = 'none';
     addProjectBtn.style.display = 'none';
     carryBtn.style.display = 'none';
@@ -1957,6 +1958,37 @@ function renderCurrentView() {
 
   pageTitle.textContent = 'История и аналитика';
   historyView.innerHTML = '<div class="empty-note">Экран истории и аналитики пока пустой. Дальше сюда можно вынести прошлые недели, статистику и ИИ-разбор.</div>';
+}
+
+function renderSettingsPageTitle() {
+  const pageTitle = document.getElementById('page-title');
+  if (!pageTitle) return;
+
+  const canViewStats = Boolean(adminStats?.summary || adminStatsError);
+  const tabs = [
+    { id: 'service', label: 'Сервис' },
+    ...(canViewStats ? [{ id: 'stats', label: 'Статистика' }] : []),
+  ];
+
+  if (!tabs.some(tab => tab.id === settingsSection)) {
+    settingsSection = 'service';
+  }
+
+  pageTitle.classList.add('page-title-with-tabs');
+  pageTitle.innerHTML = `
+    <span class="page-title-label">Настройки</span>
+    <span class="page-title-tabs" role="tablist" aria-label="Разделы настроек">
+      ${tabs.map(tab => `
+        <button
+          type="button"
+          class="page-title-tab${settingsSection === tab.id ? ' is-active' : ''}"
+          role="tab"
+          aria-selected="${settingsSection === tab.id ? 'true' : 'false'}"
+          onclick="setSettingsSection('${tab.id}')"
+        >${tab.label}</button>
+      `).join('')}
+    </span>
+  `;
 }
 
 function switchView(view) {
@@ -2364,26 +2396,6 @@ function renderSettingsView() {
           </div>
           <input id="settings-import-input" type="file" accept="application/json,.json" style="display:none" onchange="importAllDataFromFile(event)" />
         </section>
-
-        <section class="settings-card">
-          <div class="settings-card-title">Подготовка к серверной версии</div>
-          <div class="settings-info-row">
-            <span>Личный кабинет</span>
-            <b>Каркас готов</b>
-          </div>
-          <div class="settings-info-row">
-            <span>База данных</span>
-            <b>Следующий этап</b>
-          </div>
-          <div class="settings-info-row">
-            <span>Вход / авторизация</span>
-            <b>Нужно подключить</b>
-          </div>
-          <div class="settings-info-row">
-            <span>Профиль пользователя</span>
-            <b>Локальная версия уже есть</b>
-          </div>
-        </section>
       </div>
     </div>
   `;
@@ -2466,22 +2478,9 @@ function renderSettingsView() {
   document.getElementById('settings-view').innerHTML = `
     <div class="account-shell">
       <section class="settings-card account-hero account-hero-settings">
-        <div class="settings-hero-head">
-          <div class="account-hero-copy settings-hero-copy">
-            <div class="profile-name">Настройки сервиса</div>
-            <div class="profile-meta">Рабочее пространство, поведение интерфейса и резервные копии.</div>
-          </div>
-          <div class="settings-tab-strip" role="tablist" aria-label="Разделы настроек">
-            ${tabs.map(tab => `
-              <button
-                type="button"
-                class="settings-tab${settingsSection === tab.id ? ' is-active' : ''}"
-                role="tab"
-                aria-selected="${settingsSection === tab.id ? 'true' : 'false'}"
-                onclick="setSettingsSection('${tab.id}')"
-              >${tab.label}</button>
-            `).join('')}
-          </div>
+        <div class="account-hero-copy settings-hero-copy">
+          <div class="profile-name">Настройки сервиса</div>
+          <div class="profile-meta">Рабочее пространство, поведение интерфейса и резервные копии.</div>
         </div>
       </section>
 
@@ -2496,6 +2495,7 @@ function setSettingsSection(section) {
   settingsSection = normalizedSection === 'stats' && !canViewStats ? 'service' : normalizedSection;
 
   if (state.currentView === 'settings') {
+    renderSettingsPageTitle();
     renderSettingsView();
   }
 }
