@@ -2434,6 +2434,63 @@ button[id$="-delete-btn"]:hover {
   min-height: 92px;
 }
 
+.settings-hero-head {
+  width: 100%;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.settings-hero-copy {
+  flex: 1;
+  min-width: 0;
+}
+
+.settings-tab-strip {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.settings-tab {
+  position: relative;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-bottom-color: rgba(0, 0, 0, 0.06);
+  border-radius: 16px 16px 0 0;
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--text2);
+  font: 500 11px/1 var(--font-mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 12px 16px 11px;
+  transition: border-color var(--t-fast), color var(--t-fast), background var(--t-fast), transform var(--t-fast);
+}
+
+.settings-tab:hover {
+  color: var(--text);
+  border-color: rgba(0, 0, 0, 0.16);
+  transform: translateY(-1px);
+}
+
+.settings-tab.is-active {
+  background: var(--surface);
+  color: var(--text);
+  border-color: var(--border2);
+  box-shadow: 0 16px 36px rgba(23, 24, 19, 0.08);
+}
+
+.settings-tab.is-active::after {
+  content: '';
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  bottom: -1px;
+  height: 2px;
+  background: var(--surface);
+}
+
 .account-hero-copy {
   display: flex;
   flex-direction: column;
@@ -2455,6 +2512,129 @@ button[id$="-delete-btn"]:hover {
   display: flex;
   flex-direction: column;
   gap: 18px;
+}
+
+.settings-stats-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.settings-pane-intro {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.settings-pane-copy {
+  min-width: 0;
+}
+
+.settings-pane-kicker {
+  font: 500 11px/1 var(--font-mono);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text3);
+  margin-bottom: 10px;
+}
+
+.settings-pane-title {
+  font: 500 18px/1.1 var(--font-sans);
+  color: var(--text);
+  margin-bottom: 8px;
+}
+
+.settings-pane-actions {
+  flex-shrink: 0;
+}
+
+.stats-overview-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.stats-metric-card {
+  min-height: 142px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  background:
+    radial-gradient(circle at top left, rgba(208, 245, 24, 0.18), transparent 44%),
+    var(--surface);
+}
+
+.stats-metric-label {
+  font: 500 11px/1.2 var(--font-mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text3);
+}
+
+.stats-metric-value {
+  font: 500 40px/0.95 var(--font-sans);
+  color: var(--text);
+  margin: 18px 0 10px;
+}
+
+.stats-metric-note {
+  font: 400 12px/1.5 var(--font-sans);
+  color: var(--text2);
+}
+
+.stats-content-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(280px, 0.9fr);
+  gap: 18px;
+}
+
+.stats-user-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.stats-user-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.stats-user-row:last-child {
+  border-bottom: none;
+}
+
+.stats-user-main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.stats-user-email {
+  font: 500 15px/1.25 var(--font-sans);
+  color: var(--text);
+  word-break: break-word;
+}
+
+.stats-user-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.stats-user-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: var(--bg4);
+  border: 1px solid var(--border);
+  font: 400 11px/1.3 var(--font-mono);
+  color: var(--text2);
 }
 
 .archive-block {
@@ -2502,6 +2682,11 @@ button[id$="-delete-btn"]:hover {
   .account-grid {
     grid-template-columns: 1fr;
   }
+
+  .stats-overview-grid,
+  .stats-content-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 768px) {
@@ -2513,6 +2698,24 @@ button[id$="-delete-btn"]:hover {
     align-items: flex-start;
     flex-direction: column;
     min-height: auto;
+  }
+
+  .settings-hero-head,
+  .settings-pane-intro {
+    flex-direction: column;
+  }
+
+  .settings-tab-strip {
+    width: 100%;
+  }
+
+  .settings-tab {
+    flex: 1 1 auto;
+    text-align: center;
+  }
+
+  .stats-metric-value {
+    font-size: 34px;
   }
 }
 .profile-status-dot {

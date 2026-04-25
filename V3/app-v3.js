@@ -79,6 +79,7 @@ let authMode = 'login';
 let currentUser = null;
 let adminStats = null;
 let adminStatsError = '';
+let settingsSection = 'service';
 let _confirmMeta = null;
 let _sidebarDragMeta = null;
 let _planningSyncTimer = null;
@@ -2291,140 +2292,212 @@ function renderProfileView() {
 function renderSettingsView() {
   const summary = adminStats?.summary || null;
   const recentUsers = adminStats?.recentUsers || [];
+  const canViewStats = Boolean(summary || adminStatsError);
+  const tabs = [
+    { id: 'service', label: 'Сервис' },
+    ...(canViewStats ? [{ id: 'stats', label: 'Статистика' }] : []),
+  ];
+
+  if (!tabs.some(tab => tab.id === settingsSection)) {
+    settingsSection = 'service';
+  }
+
+  const metrics = summary ? [
+    { label: 'Всего регистраций', value: summary.totalUsers, note: 'Все созданные аккаунты' },
+    { label: 'Активных аккаунтов', value: summary.activeUsers, note: 'Не отключены вручную' },
+    { label: 'Логинились', value: summary.usersLoggedInEver, note: 'Хотя бы один вход' },
+    { label: 'Заходили 7 дней', value: summary.usersSeen7d, note: 'Последняя активность' },
+    { label: 'Заходили 30 дней', value: summary.usersSeen30d, note: 'Более широкий срез' },
+    { label: 'Новых 30 дней', value: summary.newUsers30d, note: 'Недавний прирост' },
+  ] : [];
+
+  const statsRows = summary ? [
+    ['С workspace', summary.usersWithWorkspace],
+    ['Новых за 7 дней', summary.newUsers7d],
+    ['Новых за 30 дней', summary.newUsers30d],
+    ['Логинились хотя бы раз', summary.usersLoggedInEver],
+  ] : [];
+
+  const servicePane = `
+    <div class="account-grid">
+      <section class="settings-card account-main">
+        <div class="settings-card-title">Сервис</div>
+        <div class="settings-form settings-form-grid">
+          <label class="field-group field-group-wide">
+            <span class="form-label">Название пространства</span>
+            <input id="settings-workspace-name" value="${escapeHtml(state.settings.workspaceName)}" />
+          </label>
+          <label class="field-group field-group-wide">
+            <span class="form-label">Стартовая страница</span>
+            <select id="settings-default-view">
+              <option value="graph"${state.settings.defaultView === 'graph' ? ' selected' : ''}>График</option>
+              <option value="tasks"${state.settings.defaultView === 'tasks' ? ' selected' : ''}>Задачи</option>
+              <option value="wins"${state.settings.defaultView === 'wins' ? ' selected' : ''}>Достижения</option>
+              <option value="history"${state.settings.defaultView === 'history' ? ' selected' : ''}>История и аналитика</option>
+              <option value="profile"${state.settings.defaultView === 'profile' ? ' selected' : ''}>Профиль</option>
+              <option value="settings"${state.settings.defaultView === 'settings' ? ' selected' : ''}>Настройки</option>
+            </select>
+          </label>
+          <label class="settings-check field-group-wide">
+            <input id="settings-sidebar-collapsed" type="checkbox" ${state.settings.sidebarCollapsedOnStart ? 'checked' : ''} />
+            <span>Сворачивать sidebar при старте</span>
+          </label>
+          <label class="settings-check field-group-wide">
+            <input id="settings-open-current-year" type="checkbox" ${state.settings.openCurrentYearInAchievements ? 'checked' : ''} />
+            <span>Открывать достижения сразу на текущем году</span>
+          </label>
+          <div class="modal-actions modal-actions-right field-group-wide">
+            <button class="primary" type="button" onclick="saveSettings()">Сохранить настройки</button>
+          </div>
+        </div>
+      </section>
+
+      <div class="account-side">
+        <section class="settings-card">
+          <div class="settings-card-title">Данные</div>
+          <div class="settings-copy">
+            Здесь можно сохранить полную резервную копию сервиса или загрузить её обратно.
+          </div>
+          <div class="settings-actions-row">
+            <button type="button" onclick="exportAllData()">Экспорт JSON</button>
+            <button type="button" onclick="triggerImportData()">Импорт JSON</button>
+          </div>
+          <input id="settings-import-input" type="file" accept="application/json,.json" style="display:none" onchange="importAllDataFromFile(event)" />
+        </section>
+
+        <section class="settings-card">
+          <div class="settings-card-title">Подготовка к серверной версии</div>
+          <div class="settings-info-row">
+            <span>Личный кабинет</span>
+            <b>Каркас готов</b>
+          </div>
+          <div class="settings-info-row">
+            <span>База данных</span>
+            <b>Следующий этап</b>
+          </div>
+          <div class="settings-info-row">
+            <span>Вход / авторизация</span>
+            <b>Нужно подключить</b>
+          </div>
+          <div class="settings-info-row">
+            <span>Профиль пользователя</span>
+            <b>Локальная версия уже есть</b>
+          </div>
+        </section>
+      </div>
+    </div>
+  `;
+
+  const statsPane = `
+    <div class="settings-stats-shell">
+      <section class="settings-card settings-pane-intro">
+        <div class="settings-pane-copy">
+          <div class="settings-pane-kicker">Статистика</div>
+          <div class="settings-pane-title">Пользователи и активность</div>
+          <div class="settings-copy">Отдельная вкладка для регистраций, логинов и последней активности без смешивания с сервисными настройками.</div>
+        </div>
+        <div class="settings-pane-actions">
+          <button id="admin-stats-refresh-btn" type="button" onclick="refreshAdminStats()">Обновить статистику</button>
+        </div>
+      </section>
+
+      ${adminStatsError ? `
+        <section class="settings-card">
+          <div class="settings-copy">${escapeHtml(adminStatsError)}</div>
+        </section>
+      ` : ''}
+
+      ${summary ? `
+        <div class="stats-overview-grid">
+          ${metrics.map(metric => `
+            <section class="settings-card stats-metric-card">
+              <div class="stats-metric-label">${metric.label}</div>
+              <div class="stats-metric-value">${metric.value}</div>
+              <div class="stats-metric-note">${metric.note}</div>
+            </section>
+          `).join('')}
+        </div>
+
+        <div class="stats-content-grid">
+          <section class="settings-card">
+            <div class="settings-card-title">Сводка</div>
+            ${statsRows.map(([label, value]) => `
+              <div class="settings-info-row">
+                <span>${label}</span>
+                <b>${value}</b>
+              </div>
+            `).join('')}
+          </section>
+
+          <section class="settings-card">
+            <div class="settings-card-title">Как читать цифры</div>
+            <div class="settings-copy">"Логинились" показывает факт входа хотя бы один раз. "Заходили" считается по последней активности, которую приложение обновляет при живой сессии.</div>
+            <div class="settings-copy">Если пользователь зарегистрировался, но ни разу не дошёл до рабочей сессии, он попадёт в регистрации, но не в активность.</div>
+          </section>
+        </div>
+
+        <section class="settings-card">
+          <div class="settings-card-title">Последние регистрации</div>
+          ${recentUsers.length ? `
+            <div class="stats-user-list">
+              ${recentUsers.map(user => `
+                <div class="stats-user-row">
+                  <div class="stats-user-main">
+                    <span class="stats-user-email">${escapeHtml(user.email)}</span>
+                    <div class="stats-user-meta">
+                      <span class="stats-user-badge">Регистрация: ${escapeHtml(formatAdminDate(user.createdAt))}</span>
+                      <span class="stats-user-badge">Логин: ${escapeHtml(formatAdminDate(user.lastLoginAt))}</span>
+                      <span class="stats-user-badge">Активность: ${escapeHtml(formatAdminDate(user.lastSeenAt))}</span>
+                    </div>
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+          ` : '<div class="empty-note compact">Пользователей пока нет.</div>'}
+        </section>
+      ` : !adminStatsError ? `
+        <section class="settings-card">
+          <div class="settings-copy">Статистика появится после первого успешного ответа сервера.</div>
+        </section>
+      ` : ''}
+    </div>
+  `;
 
   document.getElementById('settings-view').innerHTML = `
     <div class="account-shell">
       <section class="settings-card account-hero account-hero-settings">
-        <div class="account-hero-copy">
-          <div class="profile-name">Настройки сервиса</div>
-          <div class="profile-meta">Рабочее пространство, поведение интерфейса и резервные копии.</div>
+        <div class="settings-hero-head">
+          <div class="account-hero-copy settings-hero-copy">
+            <div class="profile-name">Настройки сервиса</div>
+            <div class="profile-meta">Рабочее пространство, поведение интерфейса и резервные копии.</div>
+          </div>
+          <div class="settings-tab-strip" role="tablist" aria-label="Разделы настроек">
+            ${tabs.map(tab => `
+              <button
+                type="button"
+                class="settings-tab${settingsSection === tab.id ? ' is-active' : ''}"
+                role="tab"
+                aria-selected="${settingsSection === tab.id ? 'true' : 'false'}"
+                onclick="setSettingsSection('${tab.id}')"
+              >${tab.label}</button>
+            `).join('')}
+          </div>
         </div>
       </section>
 
-      <div class="account-grid">
-        <section class="settings-card account-main">
-          <div class="settings-card-title">Сервис</div>
-          <div class="settings-form settings-form-grid">
-            <label class="field-group field-group-wide">
-              <span class="form-label">Название пространства</span>
-              <input id="settings-workspace-name" value="${escapeHtml(state.settings.workspaceName)}" />
-            </label>
-            <label class="field-group field-group-wide">
-              <span class="form-label">Стартовая страница</span>
-              <select id="settings-default-view">
-                <option value="graph"${state.settings.defaultView === 'graph' ? ' selected' : ''}>График</option>
-                <option value="tasks"${state.settings.defaultView === 'tasks' ? ' selected' : ''}>Задачи</option>
-                <option value="wins"${state.settings.defaultView === 'wins' ? ' selected' : ''}>Достижения</option>
-                <option value="history"${state.settings.defaultView === 'history' ? ' selected' : ''}>История и аналитика</option>
-                <option value="profile"${state.settings.defaultView === 'profile' ? ' selected' : ''}>Профиль</option>
-                <option value="settings"${state.settings.defaultView === 'settings' ? ' selected' : ''}>Настройки</option>
-              </select>
-            </label>
-            <label class="settings-check field-group-wide">
-              <input id="settings-sidebar-collapsed" type="checkbox" ${state.settings.sidebarCollapsedOnStart ? 'checked' : ''} />
-              <span>Сворачивать sidebar при старте</span>
-            </label>
-            <label class="settings-check field-group-wide">
-              <input id="settings-open-current-year" type="checkbox" ${state.settings.openCurrentYearInAchievements ? 'checked' : ''} />
-              <span>Открывать достижения сразу на текущем году</span>
-            </label>
-            <div class="modal-actions modal-actions-right field-group-wide">
-              <button class="primary" type="button" onclick="saveSettings()">Сохранить настройки</button>
-            </div>
-          </div>
-        </section>
-
-        <div class="account-side">
-          <section class="settings-card">
-            <div class="settings-card-title">Данные</div>
-            <div class="settings-copy">
-              Здесь можно сохранить полную резервную копию сервиса или загрузить её обратно.
-            </div>
-            <div class="settings-actions-row">
-              <button type="button" onclick="exportAllData()">Экспорт JSON</button>
-              <button type="button" onclick="triggerImportData()">Импорт JSON</button>
-            </div>
-            <input id="settings-import-input" type="file" accept="application/json,.json" style="display:none" onchange="importAllDataFromFile(event)" />
-          </section>
-
-          <section class="settings-card">
-            <div class="settings-card-title">Подготовка к серверной версии</div>
-            <div class="settings-info-row">
-              <span>Личный кабинет</span>
-              <b>Каркас готов</b>
-            </div>
-            <div class="settings-info-row">
-              <span>База данных</span>
-              <b>Следующий этап</b>
-            </div>
-            <div class="settings-info-row">
-              <span>Вход / авторизация</span>
-              <b>Нужно подключить</b>
-            </div>
-            <div class="settings-info-row">
-              <span>Профиль пользователя</span>
-              <b>Локальная версия уже есть</b>
-            </div>
-          </section>
-
-          ${summary || adminStatsError ? `
-            <section class="settings-card">
-              <div class="settings-card-title">Статистика пользователей</div>
-              ${adminStatsError ? `<div class="settings-copy">${escapeHtml(adminStatsError)}</div>` : ''}
-              ${summary ? `
-                <div class="settings-info-row">
-                  <span>Всего регистраций</span>
-                  <b>${summary.totalUsers}</b>
-                </div>
-                <div class="settings-info-row">
-                  <span>Активных аккаунтов</span>
-                  <b>${summary.activeUsers}</b>
-                </div>
-                <div class="settings-info-row">
-                  <span>С workspace</span>
-                  <b>${summary.usersWithWorkspace}</b>
-                </div>
-                <div class="settings-info-row">
-                  <span>Логинились хотя бы раз</span>
-                  <b>${summary.usersLoggedInEver}</b>
-                </div>
-                <div class="settings-info-row">
-                  <span>Заходили за 7 дней</span>
-                  <b>${summary.usersSeen7d}</b>
-                </div>
-                <div class="settings-info-row">
-                  <span>Заходили за 30 дней</span>
-                  <b>${summary.usersSeen30d}</b>
-                </div>
-                <div class="settings-info-row">
-                  <span>Новых за 7 дней</span>
-                  <b>${summary.newUsers7d}</b>
-                </div>
-                <div class="settings-info-row">
-                  <span>Новых за 30 дней</span>
-                  <b>${summary.newUsers30d}</b>
-                </div>
-                <div class="settings-copy" style="margin-top:12px;">Последние регистрации</div>
-                ${recentUsers.length ? recentUsers.map(user => `
-                  <div class="archive-row">
-                    <div class="archive-text">
-                      <span class="archive-name">${escapeHtml(user.email)}</span>
-                      <span class="profile-meta">Регистрация: ${escapeHtml(formatAdminDate(user.createdAt))}</span>
-                      <span class="profile-meta">Логин: ${escapeHtml(formatAdminDate(user.lastLoginAt))}</span>
-                      <span class="profile-meta">Последняя активность: ${escapeHtml(formatAdminDate(user.lastSeenAt))}</span>
-                    </div>
-                  </div>
-                `).join('') : '<div class="empty-note compact">Пользователей пока нет.</div>'}
-              ` : ''}
-              <div class="modal-actions modal-actions-right">
-                <button id="admin-stats-refresh-btn" type="button" onclick="refreshAdminStats()">Обновить статистику</button>
-              </div>
-            </section>
-          ` : ''}
-        </div>
-      </div>
+      ${settingsSection === 'service' ? servicePane : statsPane}
     </div>
   `;
+}
+
+function setSettingsSection(section) {
+  const normalizedSection = section === 'stats' ? 'stats' : 'service';
+  const canViewStats = Boolean(adminStats?.summary || adminStatsError);
+  settingsSection = normalizedSection === 'stats' && !canViewStats ? 'service' : normalizedSection;
+
+  if (state.currentView === 'settings') {
+    renderSettingsView();
+  }
 }
 
 async function refreshAdminStats() {
