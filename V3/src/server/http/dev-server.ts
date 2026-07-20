@@ -43,6 +43,7 @@ function getContentType(filePath: string) {
   if (filePath.endsWith('.svg')) return 'image/svg+xml';
   if (filePath.endsWith('.ico')) return 'image/x-icon';
   if (filePath.endsWith('.png')) return 'image/png';
+  if (filePath.endsWith('.woff2')) return 'font/woff2';
   return 'text/plain; charset=utf-8';
 }
 
@@ -128,6 +129,19 @@ async function route(request: Request) {
 
   if (request.method === 'GET' && url.pathname === '/app-v3.js') {
     return serveStaticAsset('app-v3.js');
+  }
+
+  const fontAssets: Record<string, string> = {
+    '/fonts/DMSans-Variable.woff2': 'fonts/DMSans-Variable.woff2',
+    '/fonts/DMSans-LightItalic.woff2': 'fonts/DMSans-LightItalic.woff2',
+    '/fonts/DMMono-Light.woff2': 'fonts/DMMono-Light.woff2',
+    '/fonts/DMMono-Regular.woff2': 'fonts/DMMono-Regular.woff2',
+    '/fonts/DMMono-Medium.woff2': 'fonts/DMMono-Medium.woff2',
+    '/fonts/DMMono-LightItalic.woff2': 'fonts/DMMono-LightItalic.woff2',
+  };
+  const fontAsset = fontAssets[url.pathname];
+  if (request.method === 'GET' && fontAsset) {
+    return serveStaticAsset(fontAsset);
   }
 
   if (request.method === 'OPTIONS') {
