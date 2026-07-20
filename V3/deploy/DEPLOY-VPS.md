@@ -76,7 +76,12 @@ Nginx должен:
 
 `BIND_HOST` на production должен оставаться `127.0.0.1`, чтобы не открывать Node.js-порт в интернет в обход HTTPS.
 
-Если перед origin-сервером используется edge reverse proxy, его nginx-конфиг находится в `deploy/nginx.nedplan-edge.conf`. Связь edge → origin идёт по HTTPS с проверкой сертификата.
+Если перед origin-сервером используется edge reverse proxy, его nginx-конфиги находятся в:
+
+- `deploy/nginx.nedplan-edge.conf` — `nedplan.ru` и `www.nedplan.ru`;
+- `deploy/nginx.additional-edge.conf` — `podo.nedplan.ru`, `english.nedplan.ru`, `hel27.ru` и `www.hel27.ru`.
+
+Связь edge → origin идёт по HTTPS с проверкой сертификата. На edge-сервере Certbot обновляет отдельные сертификаты для каждого домена.
 
 ## Что делать при обновлении
 
