@@ -74,6 +74,10 @@ Nginx должен:
 - проксировать в `http://127.0.0.1:3000`
 - отдавать SSL
 
+`BIND_HOST` на production должен оставаться `127.0.0.1`, чтобы не открывать Node.js-порт в интернет в обход HTTPS.
+
+Если перед origin-сервером используется edge reverse proxy, его nginx-конфиг находится в `deploy/nginx.nedplan-edge.conf`. Связь edge → origin идёт по HTTPS с проверкой сертификата.
+
 ## Что делать при обновлении
 
 ```bash

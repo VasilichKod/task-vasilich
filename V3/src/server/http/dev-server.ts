@@ -32,6 +32,7 @@ import {
 import { createServer, sendWebResponse, toWebRequest } from './node-request.js';
 
 const port = Number(process.env.PORT ?? 3000);
+const bindHost = process.env.BIND_HOST?.trim() || '127.0.0.1';
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(currentDir, '../../..');
 
@@ -269,6 +270,6 @@ const server = createServer(async (req, res) => {
   }
 });
 
-server.listen(port, () => {
-  console.log(`Task Vasilich V3 dev server listening on http://localhost:${port}`);
+server.listen(port, bindHost, () => {
+  console.log(`Task Vasilich V3 dev server listening on http://${bindHost}:${port}`);
 });
