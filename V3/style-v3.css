@@ -1532,8 +1532,33 @@ select option { background: var(--bg3); color: var(--text); }
   border-color: rgba(217, 59, 59, 0.44);
 }
 .modal-actions-right { justify-content: flex-end; }
-.modal-actions-balanced { }
-.modal-actions-balanced button { flex: 1; }
+.modal-actions-balanced { flex-wrap: wrap; }
+.modal-actions-balanced button { flex: 1 1 112px; }
+
+.app-toast {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 260;
+  max-width: min(420px, calc(100vw - 24px));
+  padding: 11px 14px;
+  border: 1px solid var(--border2);
+  border-radius: 14px;
+  background: var(--text);
+  color: var(--bg);
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.18);
+  font: 500 12px/1.45 var(--font-sans);
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(8px);
+  pointer-events: none;
+  transition: opacity var(--t-fast), visibility var(--t-fast), transform var(--t-fast);
+}
+.app-toast.visible {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
 
 /* Buttons */
 button {
@@ -1721,6 +1746,11 @@ button[id$="-delete-btn"]:hover {
 
 /* ─── MOBILE ─────────────────────────────────────────────── */
 @media (max-width: 768px) {
+  .app-toast {
+    right: 12px;
+    bottom: 76px;
+  }
+
   .sidebar-overlay { display: none; }
   .sidebar-overlay.active,
   .sidebar-overlay.open { display: block; }

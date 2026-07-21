@@ -81,6 +81,7 @@ let adminStats = null;
 let adminStatsError = '';
 let settingsSection = 'service';
 let _confirmMeta = null;
+let _toastTimer = null;
 let _sidebarDragMeta = null;
 let _planningSyncTimer = null;
 let _lastPlanningSyncSignature = '';
@@ -2803,6 +2804,18 @@ function openConfirmModal({ title = 'Подтверждение', message = '', 
   document.getElementById('confirm-modal').classList.add('open');
 }
 
+function showToast(message) {
+  const toast = document.getElementById('app-toast');
+  if (!toast) return;
+  if (_toastTimer) clearTimeout(_toastTimer);
+  toast.textContent = message;
+  toast.classList.add('visible');
+  _toastTimer = setTimeout(() => {
+    toast.classList.remove('visible');
+    _toastTimer = null;
+  }, 4200);
+}
+
 function closeConfirmModal() {
   document.getElementById('confirm-modal').classList.remove('open');
   _confirmMeta = null;
@@ -3004,6 +3017,8 @@ function openTaskDetailsById(event, taskIdValue) {
     document.getElementById('task-done-btn').style.display = 'inline-flex';
     document.getElementById('task-done-btn').textContent = status.done ? 'Не выполнено' : 'Выполнено';
     document.getElementById('task-delete-btn').style.display = 'none';
+    document.getElementById('task-send-btn').style.display = 'none';
+    document.getElementById('task-next-week-btn').style.display = 'none';
     document.getElementById('task-save-btn').textContent = 'Сохранить заметку';
     document.getElementById('task-modal-title').textContent = `${_taskMeta.label} — ${DAYS[recurring.dayIdx]}`;
     document.getElementById('task-modal').classList.add('open');
@@ -3019,6 +3034,7 @@ function openTaskDetailsById(event, taskIdValue) {
       wk: record.wk,
       dayIdx: record.dayIdx,
       subId: record.subId,
+      weekOffset: state.weekOffset,
       label: sub?.label || 'Задача',
     };
     document.getElementById('task-input').value = record.task.text;
@@ -3030,6 +3046,7 @@ function openTaskDetailsById(event, taskIdValue) {
     document.getElementById('task-done-btn').textContent = record.task.done ? 'Не выполнено' : 'Выполнено';
     document.getElementById('task-delete-btn').style.display = 'inline-flex';
     document.getElementById('task-send-btn').style.display = 'none';
+    document.getElementById('task-next-week-btn').style.display = 'inline-flex';
     document.getElementById('task-save-btn').textContent = 'Сохранить';
     document.getElementById('task-modal-title').textContent = `${_taskMeta.label} — ${DAYS[record.dayIdx]}`;
     document.getElementById('task-modal').classList.add('open');
@@ -3054,6 +3071,7 @@ function openTaskDetailsById(event, taskIdValue) {
   document.getElementById('task-done-btn').textContent = backlogRecord.task.done ? 'Не выполнено' : 'Выполнено';
   document.getElementById('task-delete-btn').style.display = 'inline-flex';
   document.getElementById('task-send-btn').style.display = 'inline-flex';
+  document.getElementById('task-next-week-btn').style.display = 'none';
   document.getElementById('task-save-btn').textContent = 'Сохранить';
   document.getElementById('task-modal-title').textContent = `${_taskMeta.label} — задачи`;
   document.getElementById('task-modal').classList.add('open');
@@ -3129,6 +3147,46 @@ function deleteTaskById(event, taskIdValue) {
   removeTaskById(taskIdValue);
   save();
   renderBoard();
+}
+
+function requestMoveTaskToNextWeek() {
+  if (_taskMeta?.mode !== 'regular') return;
+  const taskIdValue = _taskMeta.taskId;
+  const fromWeek = _taskMeta.wk;
+  const record = findTaskRecord(taskIdValue, fromWeek);
+  if (!record) return;
+  const sourceWeekOffset = Number.isInteger(_taskMeta.weekOffset) ? _taskMeta.weekOffset : state.weekOffset;
+  const taskText = record.task.text;
+  const targetWeekLabel = weekLabel(sourceWeekOffset + 1);
+
+  openConfirmModal({
+    title: 'Перенести задачу',
+    message: `«${taskText}» будет перенесена на ${targetWeekLabel}, в ${DAYS[record.dayIdx]}. На новой неделе она будет невыполненной.`,
+    confirmText: 'Перенести',
+    danger: false,
+    onConfirm: () => moveTaskToNextWeek(taskIdValue, fromWeek, sourceWeekOffset),
+  });
+}
+
+function moveTaskToNextWeek(taskIdValue, fromWeek, sourceWeekOffset) {
+  const removed = removeTaskById(taskIdValue, fromWeek);
+  if (!removed) return;
+
+  const toWeek = weekKey(sourceWeekOffset + 1);
+  const movedTask = { ...removed.task, done: false };
+  ensureDayProjectsWeek(toWeek);
+  insertTask(toWeek, removed.subId, removed.dayIdx, movedTask);
+
+  const sub = getSub(removed.subId);
+  if (sub && !getDayProjects(toWeek, sub.group, removed.dayIdx).includes(removed.subId)) {
+    getDayProjects(toWeek, sub.group, removed.dayIdx).push(removed.subId);
+  }
+
+  const targetWeekLabel = weekLabel(sourceWeekOffset + 1);
+  save();
+  closeTaskModal();
+  renderBoard();
+  showToast(`Перенесено: «${movedTask.text}» · ${DAYS[removed.dayIdx]} · ${targetWeekLabel}`);
 }
 
 function toggleTaskDoneFromModal() {

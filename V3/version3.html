@@ -272,6 +272,7 @@
         <button id="task-delete-btn" type="button" onclick="deleteTask()" style="display:none">Удалить</button>
         <button id="task-done-btn" type="button" onclick="toggleTaskDoneFromModal()" style="display:none">Выполнено</button>
         <button id="task-send-btn" type="button" onclick="sendTaskToGraph()" style="display:none">В график</button>
+        <button id="task-next-week-btn" type="button" onclick="requestMoveTaskToNextWeek()" style="display:none">На след. неделю</button>
         <button class="primary" id="task-save-btn" type="button" onclick="saveTask()">Сохранить</button>
       </div>
     </div>
@@ -499,6 +500,8 @@
       </div>
     </div>
   </div>
+
+  <div class="app-toast" id="app-toast" role="status" aria-live="polite"></div>
 
   <script src="./app-v3.js"></script>
 </body>
