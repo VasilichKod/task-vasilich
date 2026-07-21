@@ -81,6 +81,7 @@ model Workspace {
   achievements            Achievement[]
   achievementPageProjects AchievementPageProject[]
   achievementYears        AchievementYear[]
+  projectNoteSections     ProjectNoteSection[]
   projectNotes            ProjectNote[]
   userSettings            UserSetting[]
 
@@ -150,6 +151,7 @@ model Project {
   taskPageProjects        TaskPageProject[]
   achievements            Achievement[]
   achievementPageProjects AchievementPageProject[]
+  noteSections            ProjectNoteSection[]
   notes                   ProjectNote[]
 
   @@index([workspaceId, groupId, sortOrder])
@@ -160,17 +162,36 @@ model ProjectNote {
   id          String   @id @default(cuid())
   workspaceId String   @map("workspace_id")
   projectId   String   @map("project_id")
+  sectionId   String?  @map("section_id")
   title       String
   body        String   @default("")
   sortOrder   Int      @default(0) @map("sort_order")
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
-  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  project   Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  workspace Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project   Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  section   ProjectNoteSection? @relation(fields: [sectionId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, projectId, sectionId, sortOrder])
+  @@map("project_notes")
+}
+
+model ProjectNoteSection {
+  id          String   @id @default(cuid())
+  workspaceId String   @map("workspace_id")
+  projectId   String   @map("project_id")
+  name        String
+  sortOrder   Int      @default(0) @map("sort_order")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  workspace Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project   Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  notes     ProjectNote[]
 
   @@index([workspaceId, projectId, sortOrder])
-  @@map("project_notes")
+  @@map("project_note_sections")
 }
 
 model WeeklyTask {

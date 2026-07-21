@@ -3,13 +3,18 @@ import { ZodError } from 'zod';
 import { getCurrentSessionFromRequest } from '../../auth/current-user.js';
 import {
   createProjectNote,
+  createProjectNoteSection,
+  deleteProjectNoteSection,
   deleteProjectNote,
   getProjectNotes,
+  updateProjectNoteSection,
   updateProjectNote,
 } from './service.js';
 import {
   createProjectNoteSchema,
+  createProjectNoteSectionSchema,
   projectNoteIdSchema,
+  updateProjectNoteSectionSchema,
   updateProjectNoteSchema,
 } from './schema.js';
 
@@ -49,6 +54,41 @@ export async function handleCreateProjectNoteRequest(request: Request, projectId
   }
 }
 
+export async function handleCreateProjectNoteSectionRequest(request: Request, projectId: string) {
+  try {
+    const session = await getAuthorizedSession(request);
+    const params = projectNoteIdSchema.parse({ id: projectId });
+    const body = createProjectNoteSectionSchema.parse(await request.json());
+    const data = await createProjectNoteSection(session.userId, session.workspaceId, params.id, body);
+    return json({ ok: true, data }, 201);
+  } catch (error) {
+    return handleProjectNotesError(error, 'CREATE_PROJECT_NOTE_SECTION_FAILED');
+  }
+}
+
+export async function handleUpdateProjectNoteSectionRequest(request: Request, sectionId: string) {
+  try {
+    const session = await getAuthorizedSession(request);
+    const params = projectNoteIdSchema.parse({ id: sectionId });
+    const body = updateProjectNoteSectionSchema.parse(await request.json());
+    const data = await updateProjectNoteSection(session.userId, session.workspaceId, params.id, body);
+    return json({ ok: true, data });
+  } catch (error) {
+    return handleProjectNotesError(error, 'UPDATE_PROJECT_NOTE_SECTION_FAILED');
+  }
+}
+
+export async function handleDeleteProjectNoteSectionRequest(request: Request, sectionId: string) {
+  try {
+    const session = await getAuthorizedSession(request);
+    const params = projectNoteIdSchema.parse({ id: sectionId });
+    const data = await deleteProjectNoteSection(session.userId, session.workspaceId, params.id);
+    return json({ ok: true, data });
+  } catch (error) {
+    return handleProjectNotesError(error, 'DELETE_PROJECT_NOTE_SECTION_FAILED');
+  }
+}
+
 export async function handleUpdateProjectNoteRequest(request: Request, noteId: string) {
   try {
     const session = await getAuthorizedSession(request);
@@ -84,8 +124,15 @@ function handleProjectNotesError(error: unknown, fallbackCode: string) {
     if (error.message === 'FORBIDDEN_WORKSPACE_ACCESS' || error.message === 'INSUFFICIENT_WORKSPACE_ROLE') {
       return json({ ok: false, error: error.message }, 403);
     }
-    if (error.message === 'PROJECT_NOT_FOUND' || error.message === 'PROJECT_NOTE_NOT_FOUND') {
+    if (
+      error.message === 'PROJECT_NOT_FOUND'
+      || error.message === 'PROJECT_NOTE_NOT_FOUND'
+      || error.message === 'PROJECT_NOTE_SECTION_NOT_FOUND'
+    ) {
       return json({ ok: false, error: error.message }, 404);
+    }
+    if (error.message === 'PROJECT_NOTE_SECTION_NOT_EMPTY') {
+      return json({ ok: false, error: error.message }, 409);
     }
     return json({ ok: false, error: fallbackCode, message: error.message }, 500);
   }

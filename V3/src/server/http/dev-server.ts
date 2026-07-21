@@ -13,8 +13,11 @@ import { handleSaveAchievementsStateRequest } from '../api/achievements/index.js
 import { handleSavePlanningStateRequest } from '../api/planning/index.js';
 import {
   handleCreateProjectNoteRequest,
+  handleCreateProjectNoteSectionRequest,
+  handleDeleteProjectNoteSectionRequest,
   handleDeleteProjectNoteRequest,
   handleGetProjectNotesRequest,
+  handleUpdateProjectNoteSectionRequest,
   handleUpdateProjectNoteRequest,
 } from '../api/project-notes/index.js';
 import {
@@ -206,6 +209,20 @@ async function route(request: Request) {
 
   if (request.method === 'POST' && projectNotesMatch) {
     return withCors(request, await handleCreateProjectNoteRequest(request, projectNotesMatch[1]));
+  }
+
+  const projectNoteSectionsMatch = url.pathname.match(/^\/api\/projects\/([^/]+)\/note-sections$/);
+  if (request.method === 'POST' && projectNoteSectionsMatch) {
+    return withCors(request, await handleCreateProjectNoteSectionRequest(request, projectNoteSectionsMatch[1]));
+  }
+
+  const projectNoteSectionMatch = url.pathname.match(/^\/api\/project-note-sections\/([^/]+)$/);
+  if (request.method === 'PATCH' && projectNoteSectionMatch) {
+    return withCors(request, await handleUpdateProjectNoteSectionRequest(request, projectNoteSectionMatch[1]));
+  }
+
+  if (request.method === 'DELETE' && projectNoteSectionMatch) {
+    return withCors(request, await handleDeleteProjectNoteSectionRequest(request, projectNoteSectionMatch[1]));
   }
 
   const projectNoteMatch = url.pathname.match(/^\/api\/project-notes\/([^/]+)$/);

@@ -84,9 +84,11 @@ let _confirmMeta = null;
 let _toastTimer = null;
 let activeProjectId = null;
 let projectNotesByProject = {};
+let projectNoteSectionsByProject = {};
 let projectNotesLoadingProjectId = null;
 let projectNotesError = '';
 let manageProjectNoteId = null;
+let manageProjectNoteSectionId = null;
 let _sidebarDragMeta = null;
 let _planningSyncTimer = null;
 let _lastPlanningSyncSignature = '';
@@ -986,9 +988,11 @@ async function logoutUser() {
   _hasPersistedLocalWorkspace = false;
   activeProjectId = null;
   projectNotesByProject = {};
+  projectNoteSectionsByProject = {};
   projectNotesLoadingProjectId = null;
   projectNotesError = '';
   manageProjectNoteId = null;
+  manageProjectNoteSectionId = null;
   showAuthShell();
 }
 
@@ -1669,9 +1673,11 @@ function load() {
   _hasPersistedLocalWorkspace = false;
   activeProjectId = null;
   projectNotesByProject = {};
+  projectNoteSectionsByProject = {};
   projectNotesLoadingProjectId = null;
   projectNotesError = '';
   manageProjectNoteId = null;
+  manageProjectNoteSectionId = null;
 
   state.groups = normalizeGroups(DEFAULT_GROUPS);
   state.subs = normalizeSubs([], state.groups);
@@ -1943,9 +1949,11 @@ function renderCurrentView() {
     createBtn.textContent = '+ заметка';
     createBtn.onclick = () => openProjectNoteModal();
     addProjectBtn.style.display = 'inline-flex';
-    addProjectBtn.textContent = 'настройки';
-    addProjectBtn.onclick = () => openManage(activeProjectId);
-    carryBtn.style.display = 'none';
+    addProjectBtn.textContent = '+ раздел';
+    addProjectBtn.onclick = () => openProjectNoteSectionModal();
+    carryBtn.style.display = 'inline-flex';
+    carryBtn.textContent = 'настройки';
+    carryBtn.onclick = () => openManage(activeProjectId);
     renderProjectWorkspaceView();
     return;
   }
@@ -2181,11 +2189,23 @@ function normalizeProjectNote(note) {
   return {
     id: String(note?.id || ''),
     projectId: String(note?.projectId || ''),
+    sectionId: String(note?.sectionId || ''),
     title: String(note?.title || ''),
     body: String(note?.body || ''),
     sortOrder: Number(note?.sortOrder || 0),
     createdAt: note?.createdAt || '',
     updatedAt: note?.updatedAt || '',
+  };
+}
+
+function normalizeProjectNoteSection(section) {
+  return {
+    id: String(section?.id || ''),
+    projectId: String(section?.projectId || ''),
+    name: String(section?.name || ''),
+    sortOrder: Number(section?.sortOrder || 0),
+    createdAt: section?.createdAt || '',
+    updatedAt: section?.updatedAt || '',
   };
 }
 
@@ -2208,7 +2228,7 @@ function getProjectWorkspaceStats(projectId) {
   };
 }
 
-function renderProjectNoteCards(project, notes) {
+function renderProjectNoteCards(project, sections, notes) {
   if (projectNotesError) {
     return `
       <div class="project-notes-state project-notes-error-state">
@@ -2219,51 +2239,77 @@ function renderProjectNoteCards(project, notes) {
     `;
   }
 
-  if (projectNotesLoadingProjectId === project.id && !notes.length) {
-    return `<div class="project-note-grid project-note-skeleton-grid" aria-label="Загрузка заметок">
-      ${[0, 1, 2, 3].map(index => `
-        <div class="project-note-skeleton" style="--note-delay:${index * 55}ms">
-          <span></span><span></span><span></span>
-        </div>
-      `).join('')}
+  if (projectNotesLoadingProjectId === project.id && !sections.length) {
+    return `<div class="project-board-scroll" aria-label="Загрузка разделов">
+      <div class="project-board project-board-loading">
+        ${[0, 1, 2].map(index => `
+          <div class="project-note-column project-note-skeleton-column" style="--note-delay:${index * 55}ms">
+            <span></span><span></span><span></span>
+          </div>
+        `).join('')}
+      </div>
     </div>`;
   }
 
-  if (!notes.length) {
+  if (!sections.length) {
     return `
-      <button class="project-notes-empty" type="button" onclick="openProjectNoteModal()">
+      <button class="project-notes-empty" type="button" onclick="openProjectNoteSectionModal()">
         <span class="project-notes-empty-mark" aria-hidden="true">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="18" rx="1.5"/><rect x="14" y="3" width="7" height="18" rx="1.5"/><line x1="6.5" y1="7" x2="6.5" y2="13"/><line x1="17.5" y1="7" x2="17.5" y2="10"/></svg>
         </span>
-        <span class="project-notes-state-title">Создать первую заметку</span>
-        <span class="project-notes-state-copy">Собери здесь ссылки, доступы, решения и важный контекст по проекту.</span>
+        <span class="project-notes-state-title">Добавить первый раздел</span>
+        <span class="project-notes-state-copy">Например: «Идеи», «Доступы», «Материалы» или «Решения».</span>
       </button>
     `;
   }
 
-  return `<div class="project-note-grid">
-    ${notes.map((note, index) => {
-      const preview = note.body.trim().replace(/\s+/g, ' ').slice(0, 280);
-      return `
-        <button
-          class="project-note-card"
-          type="button"
-          style="--project-note-color:${project.color};--note-delay:${Math.min(index, 8) * 45}ms"
-          onclick="openProjectNoteModal(decodeInlineToken('${inlineToken(note.id)}'))"
-        >
-          <span class="project-note-card-title">${escapeHtml(note.title)}</span>
-          <span class="project-note-card-preview${preview ? '' : ' empty'}">${preview ? escapeHtml(preview) : 'Пока без текста'}</span>
-          <span class="project-note-card-footer">
-            <span>${escapeHtml(formatProjectNoteDate(note.updatedAt || note.createdAt))}</span>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-          </span>
-        </button>
-      `;
-    }).join('')}
-    <button class="project-note-add-card" type="button" onclick="openProjectNoteModal()">
-      <span aria-hidden="true">+</span>
-      <span>Новая заметка</span>
-    </button>
+  return `<div class="project-board-scroll">
+    <div class="project-board">
+      ${sections.map((section, sectionIndex) => {
+        const sectionNotes = notes.filter(note => note.sectionId === section.id);
+        const sectionToken = inlineToken(section.id);
+        return `
+          <section class="project-note-column" style="--column-delay:${Math.min(sectionIndex, 8) * 45}ms">
+            <header class="project-note-column-header">
+              <button class="project-note-column-title" type="button" onclick="openProjectNoteSectionModal(decodeInlineToken('${sectionToken}'))">
+                <span>${escapeHtml(section.name)}</span>
+                <span class="project-note-column-count">${sectionNotes.length}</span>
+              </button>
+              <button class="project-note-column-settings" type="button" onclick="openProjectNoteSectionModal(decodeInlineToken('${sectionToken}'))" aria-label="Настройки раздела ${escapeHtml(section.name)}">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg>
+              </button>
+            </header>
+            <div class="project-note-column-list">
+              ${sectionNotes.map((note, noteIndex) => {
+                const preview = note.body.trim().replace(/\s+/g, ' ').slice(0, 220);
+                return `
+                  <button
+                    class="project-note-card"
+                    type="button"
+                    style="--project-note-color:${project.color};--note-delay:${Math.min(noteIndex, 8) * 35}ms"
+                    onclick="openProjectNoteModal(decodeInlineToken('${inlineToken(note.id)}'))"
+                  >
+                    <span class="project-note-card-title">${escapeHtml(note.title)}</span>
+                    ${preview ? `<span class="project-note-card-preview">${escapeHtml(preview)}</span>` : ''}
+                    <span class="project-note-card-footer">
+                      <span>${escapeHtml(formatProjectNoteDate(note.updatedAt || note.createdAt))}</span>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                    </span>
+                  </button>
+                `;
+              }).join('')}
+            </div>
+            <button class="project-note-column-add" type="button" onclick="openProjectNoteModal(null, decodeInlineToken('${sectionToken}'))">
+              <span aria-hidden="true">+</span> Добавить заметку
+            </button>
+          </section>
+        `;
+      }).join('')}
+      <button class="project-note-add-column" type="button" onclick="openProjectNoteSectionModal()">
+        <span aria-hidden="true">+</span>
+        <span>Добавить раздел</span>
+      </button>
+    </div>
   </div>`;
 }
 
@@ -2273,6 +2319,7 @@ function renderProjectWorkspaceView() {
   if (!root || !project) return;
   const group = getGroup(project.group);
   const notes = projectNotesByProject[project.id] || [];
+  const sections = projectNoteSectionsByProject[project.id] || [];
   const stats = getProjectWorkspaceStats(project.id);
 
   root.innerHTML = `
@@ -2293,12 +2340,12 @@ function renderProjectWorkspaceView() {
       <section class="project-notes-section">
         <div class="project-notes-toolbar">
           <div>
-            <div class="project-notes-title">Заметки</div>
-            <div class="project-notes-subtitle">Информация без статуса выполнения</div>
+            <div class="project-notes-title">Доска проекта</div>
+            <div class="project-notes-subtitle">Разделы и заметки с важной информацией</div>
           </div>
-          <button type="button" onclick="openProjectNoteModal()">+ заметка</button>
+          <button type="button" onclick="openProjectNoteSectionModal()">+ раздел</button>
         </div>
-        ${renderProjectNoteCards(project, notes)}
+        ${renderProjectNoteCards(project, sections, notes)}
       </section>
     </div>
   `;
@@ -2318,11 +2365,12 @@ async function openProjectWorkspace(projectId) {
   closeSidebar();
 
   try {
-    const notes = await apiJson(`/api/projects/${encodeURIComponent(projectId)}/notes`, {
+    const board = await apiJson(`/api/projects/${encodeURIComponent(projectId)}/notes`, {
       method: 'GET',
       headers: {},
     });
-    projectNotesByProject[projectId] = (notes || []).map(normalizeProjectNote);
+    projectNoteSectionsByProject[projectId] = (board?.sections || []).map(normalizeProjectNoteSection);
+    projectNotesByProject[projectId] = (board?.notes || []).map(normalizeProjectNote);
   } catch (error) {
     console.error(error);
     if (activeProjectId === projectId) {
@@ -2349,16 +2397,25 @@ function setProjectNoteError(message = '') {
   node.style.display = message ? 'block' : 'none';
 }
 
-function openProjectNoteModal(noteId = null) {
+function openProjectNoteModal(noteId = null, sectionId = null) {
   if (!activeProjectId) return;
+  const sections = projectNoteSectionsByProject[activeProjectId] || [];
+  if (!sections.length) {
+    openProjectNoteSectionModal();
+    return;
+  }
   const note = noteId
     ? (projectNotesByProject[activeProjectId] || []).find(item => item.id === noteId)
     : null;
   if (noteId && !note) return;
+  const selectedSectionId = note?.sectionId || sectionId || sections[0].id;
 
   manageProjectNoteId = note?.id || null;
   document.getElementById('project-note-modal-title').textContent = note ? 'Редактировать заметку' : 'Новая заметка';
   document.getElementById('project-note-title').value = note?.title || '';
+  document.getElementById('project-note-section-select').innerHTML = sections.map(section => `
+    <option value="${escapeHtml(section.id)}"${section.id === selectedSectionId ? ' selected' : ''}>${escapeHtml(section.name)}</option>
+  `).join('');
   document.getElementById('project-note-body').value = note?.body || '';
   document.getElementById('project-note-delete-btn').style.display = note ? 'inline-flex' : 'none';
   document.getElementById('project-note-save-btn').textContent = note ? 'Сохранить' : 'Создать';
@@ -2378,9 +2435,14 @@ async function saveProjectNote() {
   const projectId = activeProjectId;
   const noteId = manageProjectNoteId;
   const title = document.getElementById('project-note-title').value.trim();
+  const sectionId = document.getElementById('project-note-section-select').value;
   const body = document.getElementById('project-note-body').value.trim();
   if (!title) {
     setProjectNoteError('Добавь название заметки.');
+    return;
+  }
+  if (!sectionId) {
+    setProjectNoteError('Выбери раздел для заметки.');
     return;
   }
 
@@ -2394,7 +2456,7 @@ async function saveProjectNote() {
       noteId ? `/api/project-notes/${encodeURIComponent(noteId)}` : `/api/projects/${encodeURIComponent(projectId)}/notes`,
       {
         method: noteId ? 'PATCH' : 'POST',
-        body: JSON.stringify({ title, body }),
+        body: JSON.stringify({ sectionId, title, body }),
       },
     );
     const normalized = normalizeProjectNote(saved);
@@ -2444,6 +2506,123 @@ function deleteProjectNote() {
       } catch (error) {
         console.error(error);
         setProjectNoteError('Не удалось удалить заметку.');
+      }
+    },
+  });
+}
+
+function setProjectNoteSectionError(message = '') {
+  const node = document.getElementById('project-note-section-error');
+  node.textContent = message;
+  node.style.display = message ? 'block' : 'none';
+}
+
+function openProjectNoteSectionModal(sectionId = null) {
+  if (!activeProjectId) return;
+  const section = sectionId
+    ? (projectNoteSectionsByProject[activeProjectId] || []).find(item => item.id === sectionId)
+    : null;
+  if (sectionId && !section) return;
+
+  manageProjectNoteSectionId = section?.id || null;
+  document.getElementById('project-note-section-modal-title').textContent = section ? 'Настройки раздела' : 'Новый раздел';
+  document.getElementById('project-note-section-name').value = section?.name || '';
+  document.getElementById('project-note-section-delete-btn').style.display = section ? 'inline-flex' : 'none';
+  document.getElementById('project-note-section-save-btn').textContent = section ? 'Сохранить' : 'Создать';
+  setProjectNoteSectionError('');
+  document.getElementById('project-note-section-modal').classList.add('open');
+  setTimeout(() => document.getElementById('project-note-section-name')?.focus(), 20);
+}
+
+function closeProjectNoteSectionModal() {
+  document.getElementById('project-note-section-modal').classList.remove('open');
+  manageProjectNoteSectionId = null;
+  setProjectNoteSectionError('');
+}
+
+async function saveProjectNoteSection() {
+  if (!activeProjectId) return;
+  const projectId = activeProjectId;
+  const sectionId = manageProjectNoteSectionId;
+  const name = document.getElementById('project-note-section-name').value.trim();
+  if (!name) {
+    setProjectNoteSectionError('Добавь название раздела.');
+    return;
+  }
+
+  const saveButton = document.getElementById('project-note-section-save-btn');
+  saveButton.disabled = true;
+  saveButton.textContent = 'Сохраняем...';
+  setProjectNoteSectionError('');
+
+  try {
+    const saved = await apiJson(
+      sectionId
+        ? `/api/project-note-sections/${encodeURIComponent(sectionId)}`
+        : `/api/projects/${encodeURIComponent(projectId)}/note-sections`,
+      {
+        method: sectionId ? 'PATCH' : 'POST',
+        body: JSON.stringify({ name }),
+      },
+    );
+    const normalized = normalizeProjectNoteSection(saved);
+    const sections = projectNoteSectionsByProject[projectId] || [];
+    projectNoteSectionsByProject[projectId] = sectionId
+      ? sections.map(item => item.id === sectionId ? normalized : item)
+      : [...sections, normalized];
+    closeProjectNoteSectionModal();
+    if (state.currentView === 'project' && activeProjectId === projectId) {
+      renderProjectWorkspaceView();
+    }
+    showToast(sectionId ? 'Раздел сохранён' : 'Раздел создан');
+  } catch (error) {
+    console.error(error);
+    setProjectNoteSectionError('Не удалось сохранить раздел. Попробуй ещё раз.');
+  } finally {
+    saveButton.disabled = false;
+    if (document.getElementById('project-note-section-modal').classList.contains('open')) {
+      saveButton.textContent = sectionId ? 'Сохранить' : 'Создать';
+    }
+  }
+}
+
+function deleteProjectNoteSection() {
+  if (!activeProjectId || !manageProjectNoteSectionId) return;
+  const projectId = activeProjectId;
+  const sectionId = manageProjectNoteSectionId;
+  const section = (projectNoteSectionsByProject[projectId] || []).find(item => item.id === sectionId);
+  const noteCount = (projectNotesByProject[projectId] || []).filter(note => note.sectionId === sectionId).length;
+
+  if (noteCount > 0) {
+    setProjectNoteSectionError('Сначала перенеси или удали заметки из этого раздела.');
+    return;
+  }
+
+  openConfirmModal({
+    title: 'Удалить раздел',
+    message: `Удалить раздел${section?.name ? ` «${section.name}»` : ''}? Это действие нельзя отменить.`,
+    confirmText: 'Удалить',
+    danger: true,
+    onConfirm: async () => {
+      try {
+        await apiJson(`/api/project-note-sections/${encodeURIComponent(sectionId)}`, {
+          method: 'DELETE',
+          headers: {},
+        });
+        projectNoteSectionsByProject[projectId] = (projectNoteSectionsByProject[projectId] || [])
+          .filter(item => item.id !== sectionId);
+        closeProjectNoteSectionModal();
+        if (state.currentView === 'project' && activeProjectId === projectId) {
+          renderProjectWorkspaceView();
+        }
+        showToast('Раздел удалён');
+      } catch (error) {
+        console.error(error);
+        setProjectNoteSectionError(
+          error instanceof Error && error.message === 'PROJECT_NOTE_SECTION_NOT_EMPTY'
+            ? 'Сначала перенеси или удали заметки из этого раздела.'
+            : 'Не удалось удалить раздел.',
+        );
       }
     },
   });
@@ -4206,6 +4385,8 @@ async function deleteProject() {
         delete projectNotesByProject[projectId];
         if (activeProjectId === projectId) {
           activeProjectId = null;
+          delete projectNotesByProject[projectId];
+          delete projectNoteSectionsByProject[projectId];
           state.currentView = 'graph';
         }
         await syncCatalogFromServer();
@@ -4623,6 +4804,7 @@ function handleModalBackdrop(event, type) {
   if (event.target !== event.currentTarget) return;
   if (type === 'task') closeTaskModal();
   if (type === 'project-note') closeProjectNoteModal();
+  if (type === 'project-note-section') closeProjectNoteSectionModal();
   if (type === 'create-task') closeCreateTaskModal();
   if (type === 'day-project') closeDayProjectModal();
   if (type === 'project-template') closeProjectTemplateManage();

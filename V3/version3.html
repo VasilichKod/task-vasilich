@@ -293,6 +293,10 @@
         <input id="project-note-title" maxlength="240" placeholder="Например: Доступы и ссылки" />
       </label>
       <label class="field-group">
+        <span class="form-label">Раздел</span>
+        <select id="project-note-section-select"></select>
+      </label>
+      <label class="field-group">
         <span class="form-label">Содержание</span>
         <textarea id="project-note-body" maxlength="50000" placeholder="Вся полезная информация по проекту..."></textarea>
       </label>
@@ -300,6 +304,27 @@
       <div class="modal-actions modal-actions-right">
         <button id="project-note-delete-btn" type="button" onclick="deleteProjectNote()" style="display:none">Удалить</button>
         <button class="primary" id="project-note-save-btn" type="button" onclick="saveProjectNote()">Сохранить</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Project note section modal -->
+  <div class="modal-bg" id="project-note-section-modal" onclick="handleModalBackdrop(event, 'project-note-section')">
+    <div class="modal project-note-section-modal">
+      <div class="modal-header">
+        <div class="modal-title" id="project-note-section-modal-title">Новый раздел</div>
+        <button class="modal-close" type="button" onclick="closeProjectNoteSectionModal()" aria-label="Закрыть">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <label class="field-group">
+        <span class="form-label">Название раздела</span>
+        <input id="project-note-section-name" maxlength="120" placeholder="Например: Идеи или Доступы" />
+      </label>
+      <div class="modal-note project-note-error" id="project-note-section-error" style="display:none"></div>
+      <div class="modal-actions modal-actions-right">
+        <button id="project-note-section-delete-btn" type="button" onclick="deleteProjectNoteSection()" style="display:none">Удалить</button>
+        <button class="primary" id="project-note-section-save-btn" type="button" onclick="saveProjectNoteSection()">Создать</button>
       </div>
     </div>
   </div>
