@@ -297,6 +297,7 @@ body {
   flex-direction: column;
   gap: 20px;
   position: sticky;
+  z-index: 130;
   top: 0;
   height: 100vh;
   overflow-y: auto;
@@ -553,7 +554,7 @@ body {
 .sidebar-group-row.flyout-open .sidebar-group-arrow svg { transform: rotate(90deg); }
 .sidebar-group-flyout {
   position: fixed;
-  z-index: 120;
+  z-index: 140;
   display: none;
   width: min(360px, calc(100vw - 24px));
   max-height: min(560px, calc(100dvh - 24px));
@@ -561,9 +562,11 @@ body {
   flex-direction: column;
   border: 1px solid var(--border2);
   border-radius: 12px;
-  background: var(--surface);
+  background: #ffffff;
   color: var(--text);
-  box-shadow: 0 18px 50px rgba(20, 20, 18, 0.16);
+  isolation: isolate;
+  opacity: 1;
+  box-shadow: 0 20px 56px rgba(20, 20, 18, 0.24);
 }
 .sidebar-group-row:hover .sidebar-group-flyout,
 .sidebar-group-row.flyout-open .sidebar-group-flyout { display: flex; }
