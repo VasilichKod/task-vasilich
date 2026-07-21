@@ -165,6 +165,12 @@
           </span>
           <span class="sidebar-link-text">Настройки</span>
         </button>
+        <button class="sidebar-action" type="button" title="Архив проектов" data-view="archive" onclick="switchView('archive')">
+          <span class="sidebar-link-icon">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8v13H3V8"/><path d="M1 3h22v5H1z"/><path d="M10 12h4"/></svg>
+          </span>
+          <span class="sidebar-link-text">Архив</span>
+        </button>
       </div>
 
       <div class="sidebar-summary" id="sidebar-summary"></div>
@@ -210,6 +216,8 @@
       <section class="tasks-view" id="tasks-view" style="display:none"></section>
       <section class="wins-view" id="wins-view" style="display:none"></section>
       <section class="project-workspace-view" id="project-view" style="display:none"></section>
+      <section class="group-workspace-view" id="group-view" style="display:none"></section>
+      <section class="archive-view" id="archive-view" style="display:none"></section>
       <section class="empty-view" id="history-view" style="display:none"></section>
       <section class="profile-view" id="profile-view" style="display:none"></section>
       <section class="settings-view" id="settings-view" style="display:none"></section>
@@ -426,7 +434,7 @@
         <div class="color-picker" id="color-picker"></div>
       </div>
       <div class="modal-actions modal-actions-right">
-        <button id="manage-delete-btn" type="button" onclick="deleteProject()" style="display:none">Удалить</button>
+        <button id="manage-delete-btn" type="button" onclick="deleteProject()" style="display:none">В архив</button>
         <button class="primary" id="manage-save-btn" type="button" onclick="saveProject()">Сохранить</button>
       </div>
     </div>

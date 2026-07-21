@@ -379,14 +379,9 @@ export async function archiveProject(userId: string, workspaceId: string, projec
     where: {
       id: projectId,
       workspaceId,
+      archivedAt: null,
     },
-    include: {
-      group: {
-        select: {
-          name: true,
-        },
-      },
-    },
+    select: { id: true },
   });
 
   if (!project) {
@@ -394,91 +389,42 @@ export async function archiveProject(userId: string, workspaceId: string, projec
   }
 
   const now = new Date();
-  const deleteAfterAt = addArchiveDeadline(now);
+  return prisma.project.update({
+    where: { id: projectId },
+    data: {
+      archivedAt: now,
+      deleteAfterAt: null,
+    },
+  });
+}
 
-  return prisma.$transaction(async (tx) => {
-    await tx.weeklyTask.deleteMany({
-      where: {
-        workspaceId,
-        projectId,
-      },
-    });
+export async function recordProjectActivity(
+  userId: string,
+  workspaceId: string,
+  projectId: string,
+  kind: 'OPEN' | 'WORK',
+) {
+  await requireWorkspaceMutationAccess(userId, workspaceId);
 
-    await tx.backlogTask.updateMany({
-      where: {
-        workspaceId,
-        projectId,
-      },
-      data: {
-        archivedAt: now,
-      },
-    });
+  const project = await prisma.project.findFirst({
+    where: { id: projectId, workspaceId, archivedAt: null },
+    select: { id: true, activityScore: true, lastActivityAt: true },
+  });
+  if (!project) throw new Error('PROJECT_NOT_FOUND');
 
-    await tx.recurringTask.updateMany({
-      where: {
-        workspaceId,
-        projectId,
-      },
-      data: {
-        archivedAt: now,
-      },
-    });
+  const now = new Date();
+  const elapsedDays = project.lastActivityAt
+    ? Math.max(0, (now.getTime() - project.lastActivityAt.getTime()) / 86_400_000)
+    : 0;
+  const decayedScore = project.activityScore * Math.pow(0.5, elapsedDays / 21);
+  const activityWeight = kind === 'WORK' ? 3 : 1;
 
-    await tx.projectTemplate.deleteMany({
-      where: {
-        workspaceId,
-        projectId,
-      },
-    });
-
-    await tx.dayProject.deleteMany({
-      where: {
-        workspaceId,
-        projectId,
-      },
-    });
-
-    await tx.taskPageProject.deleteMany({
-      where: {
-        workspaceId,
-        projectId,
-      },
-    });
-
-    await tx.achievement.updateMany({
-      where: {
-        workspaceId,
-        projectId,
-      },
-      data: {
-        projectId: null,
-        projectNameSnapshot: project.name,
-        groupNameSnapshot: project.group.name,
-      },
-    });
-
-    await tx.achievementPageProject.updateMany({
-      where: {
-        workspaceId,
-        projectId,
-      },
-      data: {
-        projectId: null,
-        groupId: null,
-        projectNameSnapshot: project.name,
-        groupNameSnapshot: project.group.name,
-      },
-    });
-
-    return tx.project.update({
-      where: {
-        id: projectId,
-      },
-      data: {
-        archivedAt: now,
-        deleteAfterAt,
-      },
-    });
+  return prisma.project.update({
+    where: { id: projectId },
+    data: {
+      activityScore: Math.min(10_000, decayedScore + activityWeight),
+      lastActivityAt: now,
+    },
   });
 }
 
@@ -496,13 +442,24 @@ export async function restoreProject(userId: string, workspaceId: string, projec
     throw new Error('PROJECT_NOT_FOUND');
   }
 
-  return prisma.project.update({
-    where: {
-      id: projectId,
-    },
-    data: {
-      archivedAt: null,
-      deleteAfterAt: null,
-    },
+  return prisma.$transaction(async tx => {
+    await Promise.all([
+      tx.backlogTask.updateMany({
+        where: { workspaceId, projectId },
+        data: { archivedAt: null },
+      }),
+      tx.recurringTask.updateMany({
+        where: { workspaceId, projectId },
+        data: { archivedAt: null },
+      }),
+    ]);
+
+    return tx.project.update({
+      where: { id: projectId },
+      data: {
+        archivedAt: null,
+        deleteAfterAt: null,
+      },
+    });
   });
 }

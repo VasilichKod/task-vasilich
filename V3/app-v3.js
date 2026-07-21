@@ -83,6 +83,9 @@ let settingsSection = 'service';
 let _confirmMeta = null;
 let _toastTimer = null;
 let activeProjectId = null;
+let activeGroupId = null;
+let sidebarGroupFlyoutId = null;
+let groupProjectQuery = '';
 let projectNotesByProject = {};
 let projectNoteSectionsByProject = {};
 let projectNotesLoadingProjectId = null;
@@ -305,6 +308,7 @@ function toCatalogGroups(groups) {
     id: group.id,
     label: group.name,
     color: normalizeColor(group.color, COLORS[0]),
+    archivedAt: group.archivedAt || '',
   }));
 }
 
@@ -314,6 +318,11 @@ function toCatalogProjects(projects) {
     label: project.name,
     group: project.groupId,
     color: normalizeColor(project.color, COLORS[0]),
+    sortOrder: Number(project.sortOrder || 0),
+    activityScore: Number(project.activityScore || 0),
+    lastActivityAt: project.lastActivityAt || '',
+    updatedAt: project.updatedAt || '',
+    archivedAt: project.archivedAt || '',
   }));
 }
 
@@ -987,6 +996,9 @@ async function logoutUser() {
   currentUser = null;
   _hasPersistedLocalWorkspace = false;
   activeProjectId = null;
+  activeGroupId = null;
+  sidebarGroupFlyoutId = null;
+  groupProjectQuery = '';
   projectNotesByProject = {};
   projectNoteSectionsByProject = {};
   projectNotesLoadingProjectId = null;
@@ -1031,6 +1043,10 @@ function normalizeSubs(subs, groups) {
     label: sub.label || `Проект ${index + 1}`,
     group: groups.some(group => group.id === sub.group) ? sub.group : fallbackGroupId,
     color: normalizeColor(sub.color, COLORS[index % COLORS.length]),
+    sortOrder: Number(sub.sortOrder ?? index),
+    activityScore: Number(sub.activityScore || 0),
+    lastActivityAt: sub.lastActivityAt || '',
+    updatedAt: sub.updatedAt || '',
   }));
 }
 
@@ -1672,6 +1688,9 @@ function seedSample() {
 function load() {
   _hasPersistedLocalWorkspace = false;
   activeProjectId = null;
+  activeGroupId = null;
+  sidebarGroupFlyoutId = null;
+  groupProjectQuery = '';
   projectNotesByProject = {};
   projectNoteSectionsByProject = {};
   projectNotesLoadingProjectId = null;
@@ -1828,6 +1847,48 @@ function renderSidebarSummary() {
   `;
 }
 
+function getProjectEffectiveActivity(project) {
+  const activityDate = new Date(project.lastActivityAt || project.updatedAt || 0);
+  const elapsedDays = Number.isNaN(activityDate.getTime())
+    ? 365
+    : Math.max(0, (Date.now() - activityDate.getTime()) / 86_400_000);
+  const decayedScore = Number(project.activityScore || 0) * Math.pow(0.5, elapsedDays / 21);
+  const currentWeekTasks = Object.values(state.data[weekKey(0)]?.[project.id] || {}).flat().length;
+  const backlogTasks = (state.backlog[project.id] || []).length;
+  return decayedScore + Math.min(currentWeekTasks, 12) * 0.35 + Math.min(backlogTasks, 8) * 0.1;
+}
+
+function getTopSidebarProjects(limit = 10) {
+  return [...state.subs]
+    .sort((left, right) => {
+      const scoreDifference = getProjectEffectiveActivity(right) - getProjectEffectiveActivity(left);
+      if (Math.abs(scoreDifference) > 0.001) return scoreDifference;
+      const rightActivity = new Date(right.lastActivityAt || right.updatedAt || 0).getTime() || 0;
+      const leftActivity = new Date(left.lastActivityAt || left.updatedAt || 0).getTime() || 0;
+      if (rightActivity !== leftActivity) return rightActivity - leftActivity;
+      return Number(left.sortOrder || 0) - Number(right.sortOrder || 0);
+    })
+    .slice(0, limit);
+}
+
+async function markProjectActivity(projectId, kind = 'OPEN') {
+  if (!projectId || !getSub(projectId)) return;
+  try {
+    const saved = await apiJson(`/api/catalog/projects/${encodeURIComponent(projectId)}/activity`, {
+      method: 'POST',
+      body: JSON.stringify({ kind }),
+    });
+    const project = getSub(projectId);
+    if (project) {
+      project.activityScore = Number(saved.activityScore || project.activityScore || 0);
+      project.lastActivityAt = saved.lastActivityAt || project.lastActivityAt || '';
+      renderSidebarLists();
+    }
+  } catch (error) {
+    console.error('Не удалось обновить активность проекта', error);
+  }
+}
+
 function renderSidebarLists() {
   document.getElementById('app').classList.toggle('sidebar-collapsed', state.ui.sidebarCollapsed);
   document.querySelector('.sidebar-title').textContent = state.settings.workspaceName || DEFAULT_SETTINGS.workspaceName;
@@ -1851,28 +1912,60 @@ function renderSidebarLists() {
   groupToggle?.classList.toggle('open', state.ui.groupsOpen);
   groupsWrap.innerHTML = `
     <button class="sidebar-inline-add" type="button" onclick="openGroupManage()">+ Добавить группу</button>
-    ${state.groups.map(group => `
+    ${state.groups.map(group => {
+      const groupProjects = state.subs.filter(project => project.group === group.id);
+      const groupToken = inlineToken(group.id);
+      return `
     <div
-      class="sidebar-item-row"
+      class="sidebar-item-row sidebar-group-row${state.currentView === 'group' && activeGroupId === group.id ? ' active' : ''}${sidebarGroupFlyoutId === group.id ? ' flyout-open' : ''}"
+      data-group-id="${escapeHtml(group.id)}"
       draggable="true"
-      ondragstart="dragSidebarItem(event, 'group', decodeInlineToken('${inlineToken(group.id)}'))"
+      onmouseenter="positionGroupFlyout(this)"
+      ondragstart="dragSidebarItem(event, 'group', decodeInlineToken('${groupToken}'))"
       ondragover="allowSidebarItemDrop(event)"
-      ondrop="dropSidebarItem(event, 'group', decodeInlineToken('${inlineToken(group.id)}'))"
+      ondrop="dropSidebarItem(event, 'group', decodeInlineToken('${groupToken}'))"
     >
-      <button class="sidebar-item-main" type="button" onclick="openGroupManage(decodeInlineToken('${inlineToken(group.id)}'))">
-        <span class="sidebar-project-dot" style="background:${group.color}"></span>
-        <span>${escapeHtml(group.label)}</span>
-      </button>
+      <div class="sidebar-group-trigger">
+        <button class="sidebar-item-main" type="button" onclick="openGroupWorkspace(decodeInlineToken('${groupToken}'))">
+          <span class="sidebar-group-avatar" style="--group-color:${group.color}">${escapeHtml(group.label.slice(0, 1).toUpperCase())}</span>
+          <span>${escapeHtml(group.label)}</span>
+        </button>
+        <button class="sidebar-group-arrow" type="button" onclick="toggleGroupFlyout(event, decodeInlineToken('${groupToken}'))" aria-label="Проекты группы ${escapeHtml(group.label)}" aria-expanded="${sidebarGroupFlyoutId === group.id ? 'true' : 'false'}">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+        </button>
+      </div>
+      <div class="sidebar-group-flyout" onclick="event.stopPropagation()">
+        <div class="sidebar-group-flyout-header">
+          <div>
+            <span class="sidebar-group-flyout-kicker">Группа</span>
+            <strong>${escapeHtml(group.label)}</strong>
+          </div>
+          <button type="button" onclick="openGroupManage(decodeInlineToken('${groupToken}'))" aria-label="Настройки группы">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.12 2.12-.06-.06a1.7 1.7 0 0 0-1.88-.34 1.7 1.7 0 0 0-1.03 1.55V20.3h-3v-.09a1.7 1.7 0 0 0-1.03-1.55 1.7 1.7 0 0 0-1.88.34l-.06.06-2.12-2.12.06-.06A1.7 1.7 0 0 0 7 15a1.7 1.7 0 0 0-1.55-1.03h-.09v-3h.09A1.7 1.7 0 0 0 7 9.94a1.7 1.7 0 0 0-.34-1.88L6.6 8l2.12-2.12.06.06a1.7 1.7 0 0 0 1.88.34A1.7 1.7 0 0 0 11.7 4.7v-.09h3v.09a1.7 1.7 0 0 0 1.03 1.55 1.7 1.7 0 0 0 1.88-.34l.06-.06L19.8 8l-.06.06a1.7 1.7 0 0 0-.34 1.88 1.7 1.7 0 0 0 1.55 1.03h.09v3h-.09A1.7 1.7 0 0 0 19.4 15z"/></svg>
+          </button>
+        </div>
+        <button class="sidebar-group-create-project" type="button" onclick="openManage(null, decodeInlineToken('${groupToken}'))">+ Создать проект</button>
+        <div class="sidebar-group-flyout-list">
+          ${groupProjects.length ? groupProjects.map(project => `
+            <button type="button" onclick="openProjectWorkspace(decodeInlineToken('${inlineToken(project.id)}'))">
+              <span class="sidebar-project-icon" style="--project-color:${project.color}" aria-hidden="true"><i></i><i></i><i></i></span>
+              <span>${escapeHtml(project.label)}</span>
+            </button>
+          `).join('') : '<div class="sidebar-group-flyout-empty">В группе пока нет проектов</div>'}
+        </div>
+        <button class="sidebar-group-open-page" type="button" onclick="openGroupWorkspace(decodeInlineToken('${groupToken}'))">Открыть страницу группы</button>
+      </div>
     </div>
-  `).join('')}`;
+  `}).join('')}`;
 
   const projectsWrap = document.getElementById('sidebar-projects');
   const projectToggle = document.querySelector('.sidebar-action[onclick="toggleSidebarSection(\'projects\')"]');
   projectsWrap.classList.toggle('open', state.ui.projectsOpen);
   projectToggle?.classList.toggle('open', state.ui.projectsOpen);
+  const topProjects = getTopSidebarProjects(10);
   projectsWrap.innerHTML = `
     <button class="sidebar-inline-add" type="button" onclick="openManage()">+ Добавить проект</button>
-    ${state.subs.map(project => `
+    ${topProjects.map(project => `
     <div
       class="sidebar-item-row${state.currentView === 'project' && activeProjectId === project.id ? ' active' : ''}"
       draggable="true"
@@ -1885,7 +1978,35 @@ function renderSidebarLists() {
         <span>${escapeHtml(project.label)}</span>
       </button>
     </div>
-  `).join('')}`;
+  `).join('')}
+    ${state.subs.length > 10 ? '<div class="sidebar-projects-hint">Остальные проекты — внутри групп</div>' : ''}
+  `;
+}
+
+function toggleGroupFlyout(event, groupId) {
+  event?.preventDefault();
+  event?.stopPropagation();
+  sidebarGroupFlyoutId = sidebarGroupFlyoutId === groupId ? null : groupId;
+  renderSidebarLists();
+  if (sidebarGroupFlyoutId) {
+    requestAnimationFrame(() => {
+      const row = [...document.querySelectorAll('.sidebar-group-row')]
+        .find(item => item.dataset.groupId === groupId);
+      positionGroupFlyout(row);
+    });
+  }
+}
+
+function positionGroupFlyout(row) {
+  if (!row || isMobileViewport()) return;
+  const flyout = row.querySelector('.sidebar-group-flyout');
+  const sidebar = document.getElementById('sidebar');
+  if (!flyout || !sidebar) return;
+  const rowRect = row.getBoundingClientRect();
+  const sidebarRect = sidebar.getBoundingClientRect();
+  const maxTop = Math.max(12, window.innerHeight - Math.min(560, window.innerHeight - 24));
+  flyout.style.left = `${Math.round(sidebarRect.right)}px`;
+  flyout.style.top = `${Math.round(Math.min(Math.max(rowRect.top, 12), maxTop))}px`;
 }
 
 function renderCurrentView() {
@@ -1893,6 +2014,8 @@ function renderCurrentView() {
   const tasksView = document.getElementById('tasks-view');
   const winsView = document.getElementById('wins-view');
   const projectView = document.getElementById('project-view');
+  const groupView = document.getElementById('group-view');
+  const archiveView = document.getElementById('archive-view');
   const historyView = document.getElementById('history-view');
   const profileView = document.getElementById('profile-view');
   const settingsView = document.getElementById('settings-view');
@@ -1907,6 +2030,8 @@ function renderCurrentView() {
   tasksView.style.display = state.currentView === 'tasks' ? 'block' : 'none';
   winsView.style.display = state.currentView === 'wins' ? 'block' : 'none';
   projectView.style.display = state.currentView === 'project' ? 'block' : 'none';
+  groupView.style.display = state.currentView === 'group' ? 'block' : 'none';
+  archiveView.style.display = state.currentView === 'archive' ? 'block' : 'none';
   historyView.style.display = state.currentView === 'history' ? 'block' : 'none';
   profileView.style.display = state.currentView === 'profile' ? 'block' : 'none';
   settingsView.style.display = state.currentView === 'settings' ? 'block' : 'none';
@@ -1934,6 +2059,27 @@ function renderCurrentView() {
   statsBar.style.display = 'none';
   pageTitle.classList.remove('page-title-with-tabs');
   pageTitle.classList.remove('project-page-title');
+
+  if (state.currentView === 'group') {
+    const group = getGroup(activeGroupId);
+    if (!group) {
+      state.currentView = 'graph';
+      activeGroupId = null;
+      renderCurrentView();
+      return;
+    }
+    pageTitle.classList.add('project-page-title');
+    pageTitle.innerHTML = `<span class="project-topbar-name"><span class="project-page-title-dot" style="background:${group.color}"></span><span>${escapeHtml(group.label)}</span></span>`;
+    createBtn.style.display = 'inline-flex';
+    createBtn.textContent = '+ проект';
+    createBtn.onclick = () => openManage(null, activeGroupId);
+    addProjectBtn.style.display = 'inline-flex';
+    addProjectBtn.textContent = 'настройки';
+    addProjectBtn.onclick = () => openGroupManage(activeGroupId);
+    carryBtn.style.display = 'none';
+    renderGroupWorkspaceView();
+    return;
+  }
 
   if (state.currentView === 'project') {
     const project = getSub(activeProjectId);
@@ -1968,6 +2114,15 @@ function renderCurrentView() {
     addProjectBtn.onclick = () => openDayProjectModal('backlog');
     carryBtn.style.display = 'none';
     renderTasksView();
+    return;
+  }
+
+  if (state.currentView === 'archive') {
+    pageTitle.textContent = 'Архив';
+    createBtn.style.display = 'none';
+    addProjectBtn.style.display = 'none';
+    carryBtn.style.display = 'none';
+    renderArchiveView();
     return;
   }
 
@@ -2351,11 +2506,114 @@ function renderProjectWorkspaceView() {
   `;
 }
 
+function formatProjectActivityLabel(project) {
+  if (!project.lastActivityAt) return 'Активность ещё не записана';
+  const date = new Date(project.lastActivityAt);
+  if (Number.isNaN(date.getTime())) return 'Активность ещё не записана';
+  const elapsedDays = Math.floor((Date.now() - date.getTime()) / 86_400_000);
+  if (elapsedDays <= 0) return 'Сегодня';
+  if (elapsedDays === 1) return 'Вчера';
+  if (elapsedDays < 7) return `${elapsedDays} дн. назад`;
+  return date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' });
+}
+
+function renderGroupWorkspaceView() {
+  const root = document.getElementById('group-view');
+  const group = getGroup(activeGroupId);
+  if (!root || !group) return;
+  const projects = state.subs.filter(project => project.group === group.id);
+
+  root.innerHTML = `
+    <div class="group-workspace-shell">
+      <header class="group-workspace-header">
+        <div>
+          <div class="group-workspace-kicker">Рабочее пространство группы</div>
+          <h1>${escapeHtml(group.label)}</h1>
+          <p>Все активные проекты этой группы в одном месте.</p>
+        </div>
+        <div class="group-workspace-count"><strong>${projects.length}</strong><span>проектов</span></div>
+      </header>
+
+      <section class="group-projects-panel">
+        <div class="group-projects-toolbar">
+          <div>
+            <strong>Проекты</strong>
+            <span id="group-projects-result-count">${projects.length}</span>
+          </div>
+          <label class="group-project-search">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><line x1="20" y1="20" x2="16.65" y2="16.65"/></svg>
+            <input type="search" value="${escapeHtml(groupProjectQuery)}" placeholder="Найти проект" oninput="filterGroupProjects(this.value)" />
+          </label>
+        </div>
+        <div class="group-project-list" id="group-project-list">
+          ${projects.length ? projects.map(project => {
+            const stats = getProjectWorkspaceStats(project.id);
+            return `
+              <article class="group-project-row" data-project-search="${escapeHtml(project.label.toLocaleLowerCase('ru-RU'))}">
+                <button class="group-project-main" type="button" onclick="openProjectWorkspace(decodeInlineToken('${inlineToken(project.id)}'))">
+                  <span class="group-project-icon" style="--project-color:${project.color}" aria-hidden="true"><i></i><i></i><i></i></span>
+                  <span class="group-project-copy">
+                    <strong>${escapeHtml(project.label)}</strong>
+                    <small>${escapeHtml(formatProjectActivityLabel(project))}</small>
+                  </span>
+                </button>
+                <div class="group-project-stats">
+                  <span><b>${stats.openWeeklyTasks}</b> в неделе</span>
+                  <span><b>${stats.backlogTasks}</b> в списке</span>
+                </div>
+                <button class="group-project-settings" type="button" onclick="openManage(decodeInlineToken('${inlineToken(project.id)}'))" aria-label="Настройки проекта ${escapeHtml(project.label)}">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg>
+                </button>
+              </article>
+            `;
+          }).join('') : `
+            <button class="group-projects-empty" type="button" onclick="openManage(null, decodeInlineToken('${inlineToken(group.id)}'))">
+              <span>В этой группе пока нет проектов</span>
+              <small>Создать первый проект</small>
+            </button>
+          `}
+        </div>
+        <div class="group-projects-no-results" id="group-projects-no-results" style="display:none">Проекты не найдены.</div>
+      </section>
+    </div>
+  `;
+  if (groupProjectQuery) filterGroupProjects(groupProjectQuery);
+}
+
+function filterGroupProjects(value) {
+  groupProjectQuery = String(value || '').trim().toLocaleLowerCase('ru-RU');
+  const rows = [...document.querySelectorAll('#group-project-list .group-project-row')];
+  let visibleCount = 0;
+  rows.forEach(row => {
+    const visible = !groupProjectQuery || row.dataset.projectSearch.includes(groupProjectQuery);
+    row.style.display = visible ? 'grid' : 'none';
+    if (visible) visibleCount++;
+  });
+  const count = document.getElementById('group-projects-result-count');
+  if (count) count.textContent = String(visibleCount);
+  const empty = document.getElementById('group-projects-no-results');
+  if (empty) empty.style.display = rows.length && visibleCount === 0 ? 'block' : 'none';
+}
+
+function openGroupWorkspace(groupId) {
+  if (!getGroup(groupId)) return;
+  activeGroupId = groupId;
+  activeProjectId = null;
+  sidebarGroupFlyoutId = null;
+  groupProjectQuery = '';
+  state.currentView = 'group';
+  state.ui.groupsOpen = true;
+  renderSidebarLists();
+  renderCurrentView();
+  closeSidebar();
+}
+
 async function openProjectWorkspace(projectId) {
   const project = getSub(projectId);
   if (!project) return;
 
   activeProjectId = projectId;
+  activeGroupId = null;
   state.currentView = 'project';
   state.ui.projectsOpen = true;
   projectNotesError = '';
@@ -2363,6 +2621,7 @@ async function openProjectWorkspace(projectId) {
   renderSidebarLists();
   renderCurrentView();
   closeSidebar();
+  void markProjectActivity(projectId, 'OPEN');
 
   try {
     const board = await apiJson(`/api/projects/${encodeURIComponent(projectId)}/notes`, {
@@ -2465,6 +2724,7 @@ async function saveProjectNote() {
       ? notes.map(note => note.id === noteId ? normalized : note)
       : [...notes, normalized];
     closeProjectNoteModal();
+    void markProjectActivity(projectId, 'WORK');
     if (state.currentView === 'project' && activeProjectId === projectId) {
       renderProjectWorkspaceView();
     }
@@ -2571,6 +2831,7 @@ async function saveProjectNoteSection() {
       ? sections.map(item => item.id === sectionId ? normalized : item)
       : [...sections, normalized];
     closeProjectNoteSectionModal();
+    void markProjectActivity(projectId, 'WORK');
     if (state.currentView === 'project' && activeProjectId === projectId) {
       renderProjectWorkspaceView();
     }
@@ -2712,10 +2973,58 @@ function getProfileInitials() {
   return parts.slice(0, 2).map(part => part[0]?.toUpperCase() || '').join('') || 'SV';
 }
 
-function renderProfileView() {
+function renderArchiveView() {
   const archivedGroups = state.archivedCatalog.groups || [];
   const archivedProjects = state.archivedCatalog.subs || [];
+  const root = document.getElementById('archive-view');
+  if (!root) return;
 
+  root.innerHTML = `
+    <div class="archive-workspace-shell">
+      <header class="archive-workspace-header">
+        <div>
+          <div class="archive-workspace-kicker">Хранилище</div>
+          <h1>Архив проектов</h1>
+          <p>Проекты здесь не мешают работе, но сохраняют свои задачи, заметки и разделы.</p>
+        </div>
+        <div class="archive-workspace-count"><strong>${archivedProjects.length}</strong><span>в архиве</span></div>
+      </header>
+
+      <section class="archive-projects-panel">
+        <div class="archive-projects-title">Проекты</div>
+        ${archivedProjects.length ? archivedProjects.map(project => {
+          const group = state.groups.find(item => item.id === project.group)
+            || archivedGroups.find(item => item.id === project.group);
+          return `
+            <article class="archive-project-row">
+              <span class="group-project-icon" style="--project-color:${project.color}" aria-hidden="true"><i></i><i></i><i></i></span>
+              <div class="archive-project-copy">
+                <strong>${escapeHtml(project.label)}</strong>
+                <small>${escapeHtml(group?.label || 'Без группы')} · сохранён целиком</small>
+              </div>
+              <button type="button" onclick="restoreArchivedProject(decodeInlineToken('${inlineToken(project.id)}'))">Восстановить</button>
+            </article>
+          `;
+        }).join('') : '<div class="archive-projects-empty">В архиве пока нет проектов.</div>'}
+      </section>
+
+      ${archivedGroups.length ? `
+        <section class="archive-groups-panel">
+          <div class="archive-projects-title">Архивные группы</div>
+          ${archivedGroups.map(group => `
+            <div class="archive-project-row">
+              <span class="sidebar-group-avatar" style="--group-color:${group.color}">${escapeHtml(group.label.slice(0, 1).toUpperCase())}</span>
+              <div class="archive-project-copy"><strong>${escapeHtml(group.label)}</strong><small>Группа</small></div>
+              <button type="button" onclick="restoreArchivedGroup(decodeInlineToken('${inlineToken(group.id)}'))">Восстановить</button>
+            </div>
+          `).join('')}
+        </section>
+      ` : ''}
+    </div>
+  `;
+}
+
+function renderProfileView() {
   document.getElementById('profile-view').innerHTML = `
     <div class="account-shell">
       <section class="settings-card account-hero">
@@ -2782,34 +3091,6 @@ function renderProfileView() {
             </div>
           </section>
 
-          <section class="settings-card">
-            <div class="settings-card-title">Архив</div>
-            <div class="settings-copy">
-              Удалённые группы и проекты хранятся 30 дней. Здесь их можно вернуть обратно.
-            </div>
-            <div class="archive-block">
-              <div class="archive-subtitle">Группы</div>
-              ${archivedGroups.length ? archivedGroups.map(group => `
-                <div class="archive-row">
-                  <div class="archive-text">
-                    <span class="archive-name">${escapeHtml(group.label)}</span>
-                  </div>
-                  <button type="button" onclick="restoreArchivedGroup(decodeInlineToken('${inlineToken(group.id)}'))">Восстановить</button>
-                </div>
-              `).join('') : '<div class="empty-note compact">Архивных групп пока нет.</div>'}
-            </div>
-            <div class="archive-block">
-              <div class="archive-subtitle">Проекты</div>
-              ${archivedProjects.length ? archivedProjects.map(project => `
-                <div class="archive-row">
-                  <div class="archive-text">
-                    <span class="archive-name">${escapeHtml(project.label)}</span>
-                  </div>
-                  <button type="button" onclick="restoreArchivedProject(decodeInlineToken('${inlineToken(project.id)}'))">Восстановить</button>
-                </div>
-              `).join('') : '<div class="empty-note compact">Архивных проектов пока нет.</div>'}
-            </div>
-          </section>
         </div>
       </div>
     </div>
@@ -3345,6 +3626,7 @@ function saveAchievement() {
   }
 
   save();
+  void markProjectActivity(subId, 'WORK');
   closeAchievementModal();
   renderWinsView();
 }
@@ -3376,9 +3658,11 @@ function changeWeek(delta) {
 function toggleById(taskIdValue) {
   const recurringMeta = parseRecurringDomId(taskIdValue);
   if (recurringMeta) {
+    const recurring = state.recurring.find(item => item.id === recurringMeta.recurringId);
     const status = getRecurringStatus(recurringMeta.wk, recurringMeta.recurringId);
     status.done = !status.done;
     save();
+    if (recurring) void markProjectActivity(recurring.subId, 'WORK');
     renderBoard();
     return;
   }
@@ -3387,6 +3671,7 @@ function toggleById(taskIdValue) {
   if (record) {
     record.task.done = !record.task.done;
     save();
+    void markProjectActivity(record.subId, 'WORK');
     renderCurrentView();
     return;
   }
@@ -3395,6 +3680,7 @@ function toggleById(taskIdValue) {
   if (!backlogRecord) return;
   backlogRecord.task.done = !backlogRecord.task.done;
   save();
+  void markProjectActivity(backlogRecord.subId, 'WORK');
   renderCurrentView();
 }
 
@@ -3432,9 +3718,11 @@ function saveInlineTask() {
   if (!_inlineTaskMeta) return;
   const text = (_inlineTaskMeta.text || '').trim();
   if (!text) return;
-  insertTask(weekKey(state.weekOffset), _inlineTaskMeta.subId, _inlineTaskMeta.dayIdx, makeTask({ text, done: false, note: '' }));
+  const projectId = _inlineTaskMeta.subId;
+  insertTask(weekKey(state.weekOffset), projectId, _inlineTaskMeta.dayIdx, makeTask({ text, done: false, note: '' }));
   _inlineTaskMeta = null;
   save();
+  void markProjectActivity(projectId, 'WORK');
   renderBoard();
 }
 
@@ -3476,9 +3764,11 @@ function saveInlineBacklogTask() {
   if (!_inlineBacklogMeta) return;
   const text = (_inlineBacklogMeta.text || '').trim();
   if (!text) return;
-  getBacklogForProject(_inlineBacklogMeta.subId).push(makeTask({ text, done: false, note: '' }));
+  const projectId = _inlineBacklogMeta.subId;
+  getBacklogForProject(projectId).push(makeTask({ text, done: false, note: '' }));
   _inlineBacklogMeta = null;
   save();
+  void markProjectActivity(projectId, 'WORK');
   renderTasksView();
 }
 
@@ -3516,6 +3806,7 @@ function openTaskDetailsById(event, taskIdValue) {
     document.getElementById('task-save-btn').textContent = 'Сохранить заметку';
     document.getElementById('task-modal-title').textContent = `${_taskMeta.label} — ${DAYS[recurring.dayIdx]}`;
     document.getElementById('task-modal').classList.add('open');
+    void markProjectActivity(recurring.subId, 'WORK');
     return;
   }
 
@@ -3544,6 +3835,7 @@ function openTaskDetailsById(event, taskIdValue) {
     document.getElementById('task-save-btn').textContent = 'Сохранить';
     document.getElementById('task-modal-title').textContent = `${_taskMeta.label} — ${DAYS[record.dayIdx]}`;
     document.getElementById('task-modal').classList.add('open');
+    void markProjectActivity(record.subId, 'WORK');
     return;
   }
 
@@ -3569,6 +3861,7 @@ function openTaskDetailsById(event, taskIdValue) {
   document.getElementById('task-save-btn').textContent = 'Сохранить';
   document.getElementById('task-modal-title').textContent = `${_taskMeta.label} — задачи`;
   document.getElementById('task-modal').classList.add('open');
+  void markProjectActivity(backlogRecord.subId, 'WORK');
 }
 
 function closeTaskModal() {
@@ -3788,6 +4081,7 @@ function saveCreatedTask() {
   if (_createTaskMeta.mode === 'backlog') {
     getBacklogForProject(subId).push(makeTask({ text, done: false, note: '' }));
     save();
+    void markProjectActivity(subId, 'WORK');
     closeCreateTaskModal();
     renderTasksView();
     return;
@@ -3797,6 +4091,7 @@ function saveCreatedTask() {
     getDayProjects(_createTaskMeta.wk, groupId, dayIdx).push(subId);
   }
   save();
+  void markProjectActivity(subId, 'WORK');
   closeCreateTaskModal();
   renderBoard();
 }
@@ -4263,15 +4558,16 @@ async function dropSidebarItem(event, type, targetId) {
   }
 }
 
-function openManage(projectId = null) {
+function openManage(projectId = null, preferredGroupId = null) {
   manageProjectId = projectId;
   const project = state.subs.find(item => item.id === projectId);
-  newProjGroup = project?.group || state.groups[0]?.id || DEFAULT_GROUPS[0].id;
+  newProjGroup = project?.group || preferredGroupId || state.groups[0]?.id || DEFAULT_GROUPS[0].id;
   newProjColor = project?.color || COLORS[0];
   document.getElementById('proj-name').value = project?.label || '';
   document.getElementById('manage-modal-title').textContent = project ? 'Редактировать проект' : 'Добавить проект';
   document.getElementById('manage-save-btn').textContent = project ? 'Сохранить' : 'Создать';
   document.getElementById('manage-delete-btn').style.display = project ? 'inline-flex' : 'none';
+  document.getElementById('manage-delete-btn').textContent = 'В архив';
   renderProjectGroupOptions();
   renderColorPicker('color-picker', newProjColor, 'pickColor');
   document.getElementById('manage-modal').classList.add('open');
@@ -4312,6 +4608,15 @@ function removeProjectFromLocalState(projectId) {
     delete state.data[wk][projectId];
   });
   delete state.backlog[projectId];
+  Object.keys(state.achievements).forEach(year => {
+    delete state.achievements[year][projectId];
+  });
+  Object.keys(state.achievementProjects).forEach(year => {
+    Object.keys(state.achievementProjects[year] || {}).forEach(groupId => {
+      state.achievementProjects[year][groupId] = (state.achievementProjects[year][groupId] || [])
+        .filter(id => id !== projectId);
+    });
+  });
   Object.keys(state.dayProjects).forEach(wk => {
     state.groups.forEach(group => {
       DAYS.forEach((_, dayIdx) => {
@@ -4370,10 +4675,10 @@ async function deleteProject() {
   const projectId = manageProjectId;
   const project = getSub(projectId);
   openConfirmModal({
-    title: 'Удалить проект',
-    message: `Удалить проект${project?.label ? ` «${project.label}»` : ''}? Он уйдёт в архив на 30 дней.`,
-    confirmText: 'Удалить',
-    danger: true,
+    title: 'Архивировать проект',
+    message: `Переместить проект${project?.label ? ` «${project.label}»` : ''} в архив? Все задачи, заметки и разделы сохранятся.`,
+    confirmText: 'В архив',
+    danger: false,
     onConfirm: async () => {
       try {
         await apiJson(`/api/catalog/projects/${projectId}`, {
@@ -4383,18 +4688,18 @@ async function deleteProject() {
 
         removeProjectFromLocalState(projectId);
         delete projectNotesByProject[projectId];
+        delete projectNoteSectionsByProject[projectId];
         if (activeProjectId === projectId) {
           activeProjectId = null;
-          delete projectNotesByProject[projectId];
-          delete projectNoteSectionsByProject[projectId];
           state.currentView = 'graph';
         }
         await syncCatalogFromServer();
         closeManage();
         renderCurrentView();
+        showToast('Проект перемещён в архив');
       } catch (error) {
         console.error(error);
-        alert('Не удалось удалить проект.');
+        alert('Не удалось переместить проект в архив.');
       }
     },
   });
@@ -4423,7 +4728,9 @@ async function restoreArchivedProject(projectId) {
     });
 
     await syncCatalogFromServer();
+    await syncPlanningFromServer();
     renderCurrentView();
+    showToast('Проект восстановлен');
   } catch (error) {
     console.error(error);
     alert('Не удалось восстановить проект.');

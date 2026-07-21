@@ -287,10 +287,13 @@ export async function getWorkspaceBootstrap(input: WorkspaceBootstrapInput) {
         name: true,
         groupId: true,
         color: true,
+        sortOrder: true,
+        activityScore: true,
+        lastActivityAt: true,
       },
     }),
     prisma.weeklyTask.findMany({
-      where: { workspaceId },
+      where: { workspaceId, project: { archivedAt: null } },
       orderBy: [{ weekStartDate: 'asc' }, { dayIndex: 'asc' }, { sortOrder: 'asc' }, { createdAt: 'asc' }],
       select: {
         id: true,
@@ -303,7 +306,7 @@ export async function getWorkspaceBootstrap(input: WorkspaceBootstrapInput) {
       },
     }),
     prisma.backlogTask.findMany({
-      where: { workspaceId, archivedAt: null },
+      where: { workspaceId, archivedAt: null, project: { archivedAt: null } },
       orderBy: [{ projectId: 'asc' }, { sortOrder: 'asc' }, { createdAt: 'asc' }],
       select: {
         id: true,
@@ -314,7 +317,7 @@ export async function getWorkspaceBootstrap(input: WorkspaceBootstrapInput) {
       },
     }),
     prisma.recurringTask.findMany({
-      where: { workspaceId, archivedAt: null },
+      where: { workspaceId, archivedAt: null, project: { archivedAt: null } },
       orderBy: [{ projectId: 'asc' }, { dayIndex: 'asc' }, { sortOrder: 'asc' }, { createdAt: 'asc' }],
       select: {
         id: true,
@@ -324,7 +327,10 @@ export async function getWorkspaceBootstrap(input: WorkspaceBootstrapInput) {
       },
     }),
     prisma.recurringTaskStatus.findMany({
-      where: { workspaceId },
+      where: {
+        workspaceId,
+        recurringTask: { archivedAt: null, project: { archivedAt: null } },
+      },
       orderBy: [{ weekStartDate: 'asc' }, { createdAt: 'asc' }],
       select: {
         recurringTaskId: true,
@@ -334,7 +340,7 @@ export async function getWorkspaceBootstrap(input: WorkspaceBootstrapInput) {
       },
     }),
     prisma.projectTemplate.findMany({
-      where: { workspaceId },
+      where: { workspaceId, project: { archivedAt: null } },
       orderBy: [{ groupId: 'asc' }, { dayIndex: 'asc' }, { createdAt: 'asc' }],
       select: {
         groupId: true,
@@ -344,7 +350,7 @@ export async function getWorkspaceBootstrap(input: WorkspaceBootstrapInput) {
       },
     }),
     prisma.dayProject.findMany({
-      where: { workspaceId },
+      where: { workspaceId, project: { archivedAt: null } },
       orderBy: [{ weekStartDate: 'asc' }, { groupId: 'asc' }, { dayIndex: 'asc' }, { sortOrder: 'asc' }, { createdAt: 'asc' }],
       select: {
         weekStartDate: true,
@@ -354,7 +360,10 @@ export async function getWorkspaceBootstrap(input: WorkspaceBootstrapInput) {
       },
     }),
     prisma.achievement.findMany({
-      where: { workspaceId },
+      where: {
+        workspaceId,
+        OR: [{ projectId: null }, { project: { archivedAt: null } }],
+      },
       orderBy: [{ achievementYear: 'desc' }, { achievementDate: 'desc' }, { sortOrder: 'asc' }, { createdAt: 'asc' }],
       select: {
         id: true,
@@ -365,7 +374,7 @@ export async function getWorkspaceBootstrap(input: WorkspaceBootstrapInput) {
       },
     }),
     prisma.taskPageProject.findMany({
-      where: { workspaceId },
+      where: { workspaceId, project: { archivedAt: null } },
       orderBy: [{ groupId: 'asc' }, { sortOrder: 'asc' }, { createdAt: 'asc' }],
       select: {
         groupId: true,
@@ -373,7 +382,10 @@ export async function getWorkspaceBootstrap(input: WorkspaceBootstrapInput) {
       },
     }),
     prisma.achievementPageProject.findMany({
-      where: { workspaceId },
+      where: {
+        workspaceId,
+        OR: [{ projectId: null }, { project: { archivedAt: null } }],
+      },
       orderBy: [{ achievementYear: 'desc' }, { groupId: 'asc' }, { sortOrder: 'asc' }, { createdAt: 'asc' }],
       select: {
         achievementYear: true,

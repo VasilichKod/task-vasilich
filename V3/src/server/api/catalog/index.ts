@@ -5,6 +5,7 @@ export {
   handleCreateProjectRequest,
   handleGetArchivedCatalogRequest,
   handleGetCatalogRequest,
+  handleRecordProjectActivityRequest,
   handleRestoreGroupRequest,
   handleRestoreProjectRequest,
   handleUpdateGroupRequest,

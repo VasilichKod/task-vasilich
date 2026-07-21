@@ -115,8 +115,24 @@ async function replaceAchievementsState(
 ) {
   await validateAchievementsStateReferences(tx, workspaceId, input);
 
-  await tx.achievement.deleteMany({ where: { workspaceId } });
-  await tx.achievementPageProject.deleteMany({ where: { workspaceId } });
+  const activeProjects = await tx.project.findMany({
+    where: { workspaceId, archivedAt: null },
+    select: { id: true },
+  });
+  const activeProjectIds = activeProjects.map(project => project.id);
+
+  await tx.achievement.deleteMany({
+    where: {
+      workspaceId,
+      OR: [{ projectId: { in: activeProjectIds } }, { projectId: null }],
+    },
+  });
+  await tx.achievementPageProject.deleteMany({
+    where: {
+      workspaceId,
+      OR: [{ projectId: { in: activeProjectIds } }, { projectId: null }],
+    },
+  });
   await tx.achievementYear.deleteMany({ where: { workspaceId } });
 
   const projectSnapshots = await getProjectSnapshots(workspaceId, tx);

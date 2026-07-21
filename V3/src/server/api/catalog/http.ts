@@ -8,6 +8,7 @@ import {
   createProject,
   getArchivedCatalog,
   getCatalog,
+  recordProjectActivity,
   restoreGroup,
   restoreProject,
   updateGroup,
@@ -17,6 +18,7 @@ import {
   createGroupSchema,
   createProjectSchema,
   entityIdSchema,
+  projectActivitySchema,
   updateGroupSchema,
   updateProjectSchema,
 } from './schema.js';
@@ -145,6 +147,24 @@ export async function handleArchiveProjectRequest(request: Request, projectId: s
     return json({ ok: true, data });
   } catch (error) {
     return handleCatalogError(error, 'ARCHIVE_PROJECT_FAILED');
+  }
+}
+
+export async function handleRecordProjectActivityRequest(request: Request, projectId: string) {
+  try {
+    const session = await getAuthorizedSession(request);
+    const params = entityIdSchema.parse({ id: projectId });
+    const body = projectActivitySchema.parse(await request.json());
+    const data = await recordProjectActivity(
+      session.userId,
+      session.workspaceId,
+      params.id,
+      body.kind,
+    );
+
+    return json({ ok: true, data });
+  } catch (error) {
+    return handleCatalogError(error, 'RECORD_PROJECT_ACTIVITY_FAILED');
   }
 }
 

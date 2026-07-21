@@ -127,13 +127,24 @@ async function replacePlanningState(
 ) {
   await validatePlanningStateReferences(tx, workspaceId, input);
 
-  await tx.recurringTaskStatus.deleteMany({ where: { workspaceId } });
-  await tx.weeklyTask.deleteMany({ where: { workspaceId } });
-  await tx.backlogTask.deleteMany({ where: { workspaceId } });
-  await tx.recurringTask.deleteMany({ where: { workspaceId } });
-  await tx.projectTemplate.deleteMany({ where: { workspaceId } });
-  await tx.dayProject.deleteMany({ where: { workspaceId } });
-  await tx.taskPageProject.deleteMany({ where: { workspaceId } });
+  const activeProjects = await tx.project.findMany({
+    where: { workspaceId, archivedAt: null },
+    select: { id: true },
+  });
+  const activeProjectIds = activeProjects.map(project => project.id);
+
+  await tx.recurringTaskStatus.deleteMany({
+    where: {
+      workspaceId,
+      recurringTask: { projectId: { in: activeProjectIds } },
+    },
+  });
+  await tx.weeklyTask.deleteMany({ where: { workspaceId, projectId: { in: activeProjectIds } } });
+  await tx.backlogTask.deleteMany({ where: { workspaceId, projectId: { in: activeProjectIds } } });
+  await tx.recurringTask.deleteMany({ where: { workspaceId, projectId: { in: activeProjectIds } } });
+  await tx.projectTemplate.deleteMany({ where: { workspaceId, projectId: { in: activeProjectIds } } });
+  await tx.dayProject.deleteMany({ where: { workspaceId, projectId: { in: activeProjectIds } } });
+  await tx.taskPageProject.deleteMany({ where: { workspaceId, projectId: { in: activeProjectIds } } });
 
   const backlogRows = Object.entries(input.backlog).flatMap(([projectId, tasks]) =>
     tasks.map((task, index) => ({

@@ -27,6 +27,7 @@ import {
   handleCreateProjectRequest,
   handleGetArchivedCatalogRequest,
   handleGetCatalogRequest,
+  handleRecordProjectActivityRequest,
   handleRestoreGroupRequest,
   handleRestoreProjectRequest,
   handleUpdateGroupRequest,
@@ -263,6 +264,11 @@ async function route(request: Request) {
 
   if (request.method === 'POST' && url.pathname === '/api/catalog/projects') {
     return withCors(request, await handleCreateProjectRequest(request));
+  }
+
+  if (request.method === 'POST' && url.pathname.startsWith('/api/catalog/projects/') && url.pathname.endsWith('/activity')) {
+    const projectId = url.pathname.slice('/api/catalog/projects/'.length, -'/activity'.length);
+    return withCors(request, await handleRecordProjectActivityRequest(request, projectId));
   }
 
   if (request.method === 'PATCH' && url.pathname.startsWith('/api/catalog/projects/')) {

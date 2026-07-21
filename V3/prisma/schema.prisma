@@ -130,16 +130,18 @@ model Group {
 }
 
 model Project {
-  id            String    @id @default(cuid())
-  workspaceId   String    @map("workspace_id")
-  groupId       String    @map("group_id")
-  name          String
-  color         String
-  sortOrder     Int       @default(0) @map("sort_order")
-  archivedAt    DateTime? @map("archived_at")
-  deleteAfterAt DateTime? @map("delete_after_at")
-  createdAt     DateTime  @default(now()) @map("created_at")
-  updatedAt     DateTime  @updatedAt @map("updated_at")
+  id             String    @id @default(cuid())
+  workspaceId    String    @map("workspace_id")
+  groupId        String    @map("group_id")
+  name           String
+  color          String
+  sortOrder      Int       @default(0) @map("sort_order")
+  activityScore  Float     @default(0) @map("activity_score")
+  lastActivityAt DateTime? @map("last_activity_at")
+  archivedAt     DateTime? @map("archived_at")
+  deleteAfterAt  DateTime? @map("delete_after_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
 
   workspace               Workspace                @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   group                   Group                    @relation(fields: [groupId], references: [id], onDelete: Restrict)
@@ -155,6 +157,7 @@ model Project {
   notes                   ProjectNote[]
 
   @@index([workspaceId, groupId, sortOrder])
+  @@index([workspaceId, lastActivityAt])
   @@map("projects")
 }
 

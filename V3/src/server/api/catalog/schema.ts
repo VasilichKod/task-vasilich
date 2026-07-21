@@ -28,6 +28,10 @@ export const updateProjectSchema = z.object({
   sortOrder: z.number().int().min(0).optional(),
 });
 
+export const projectActivitySchema = z.object({
+  kind: z.enum(['OPEN', 'WORK']),
+});
+
 export const entityIdSchema = z.object({
   id: z.string().trim().min(1),
 });
