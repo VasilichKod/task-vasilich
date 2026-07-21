@@ -1944,7 +1944,7 @@ function renderCurrentView() {
       return;
     }
     pageTitle.classList.add('project-page-title');
-    pageTitle.innerHTML = `<span class="project-page-title-dot" style="background:${project.color}"></span><span>${escapeHtml(project.label)}</span>`;
+    renderProjectTopBarTitle(project);
     createBtn.style.display = 'inline-flex';
     createBtn.textContent = '+ заметка';
     createBtn.onclick = () => openProjectNoteModal();
@@ -2228,6 +2228,25 @@ function getProjectWorkspaceStats(projectId) {
   };
 }
 
+function renderProjectTopBarTitle(project) {
+  const pageTitle = document.getElementById('page-title');
+  if (!pageTitle || !project) return;
+  const notes = projectNotesByProject[project.id] || [];
+  const stats = getProjectWorkspaceStats(project.id);
+
+  pageTitle.innerHTML = `
+    <span class="project-topbar-name">
+      <span class="project-page-title-dot" style="background:${project.color}"></span>
+      <span>${escapeHtml(project.label)}</span>
+    </span>
+    <span class="project-topbar-metrics" aria-label="Сводка проекта">
+      <span><strong>${notes.length}</strong> заметок</span>
+      <span><strong>${stats.openWeeklyTasks}</strong> в неделе</span>
+      <span><strong>${stats.backlogTasks}</strong> в списке</span>
+    </span>
+  `;
+}
+
 function renderProjectNoteCards(project, sections, notes) {
   if (projectNotesError) {
     return `
@@ -2317,34 +2336,15 @@ function renderProjectWorkspaceView() {
   const root = document.getElementById('project-view');
   const project = getSub(activeProjectId);
   if (!root || !project) return;
-  const group = getGroup(project.group);
   const notes = projectNotesByProject[project.id] || [];
   const sections = projectNoteSectionsByProject[project.id] || [];
-  const stats = getProjectWorkspaceStats(project.id);
+  renderProjectTopBarTitle(project);
 
   root.innerHTML = `
     <div class="project-workspace-shell">
-      <header class="project-workspace-header" style="--project-workspace-color:${project.color}">
-        <div class="project-workspace-identity">
-          <div class="project-workspace-kicker">${escapeHtml(group?.label || 'Без группы')} · рабочее пространство</div>
-          <h1>${escapeHtml(project.label)}</h1>
-          <p>Заметки, решения и важная информация, которая должна жить вместе с проектом.</p>
-        </div>
-        <div class="project-workspace-metrics" aria-label="Сводка проекта">
-          <div><strong>${notes.length}</strong><span>заметок</span></div>
-          <div><strong>${stats.openWeeklyTasks}</strong><span>задач в неделе</span></div>
-          <div><strong>${stats.backlogTasks}</strong><span>в списке</span></div>
-        </div>
-      </header>
+      <div class="project-workspace-label">Рабочее пространство</div>
 
       <section class="project-notes-section">
-        <div class="project-notes-toolbar">
-          <div>
-            <div class="project-notes-title">Доска проекта</div>
-            <div class="project-notes-subtitle">Разделы и заметки с важной информацией</div>
-          </div>
-          <button type="button" onclick="openProjectNoteSectionModal()">+ раздел</button>
-        </div>
         ${renderProjectNoteCards(project, sections, notes)}
       </section>
     </div>
