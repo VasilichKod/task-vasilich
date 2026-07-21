@@ -23,6 +23,12 @@ enum DefaultView {
   SETTINGS
 }
 
+enum WishItemStatus {
+  IDEA
+  PLANNED
+  FULFILLED
+}
+
 model User {
   id           String    @id @default(cuid())
   email        String    @unique
@@ -83,6 +89,8 @@ model Workspace {
   achievementYears        AchievementYear[]
   projectNoteSections     ProjectNoteSection[]
   projectNotes            ProjectNote[]
+  wishLists               WishList[]
+  wishItems               WishItem[]
   userSettings            UserSetting[]
 
   @@index([ownerUserId])
@@ -138,6 +146,7 @@ model Project {
   sortOrder      Int       @default(0) @map("sort_order")
   activityScore  Float     @default(0) @map("activity_score")
   lastActivityAt DateTime? @map("last_activity_at")
+  balanceEnabled Boolean   @default(true) @map("balance_enabled")
   archivedAt     DateTime? @map("archived_at")
   deleteAfterAt  DateTime? @map("delete_after_at")
   createdAt      DateTime  @default(now()) @map("created_at")
@@ -159,6 +168,43 @@ model Project {
   @@index([workspaceId, groupId, sortOrder])
   @@index([workspaceId, lastActivityAt])
   @@map("projects")
+}
+
+model WishList {
+  id          String   @id @default(cuid())
+  workspaceId String   @map("workspace_id")
+  name        String
+  color       String
+  sortOrder   Int      @default(0) @map("sort_order")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  workspace Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  items     WishItem[]
+
+  @@index([workspaceId, sortOrder, createdAt])
+  @@map("wish_lists")
+}
+
+model WishItem {
+  id          String         @id @default(cuid())
+  workspaceId String         @map("workspace_id")
+  listId      String         @map("list_id")
+  title       String
+  note        String         @default("")
+  url         String         @default("")
+  priceText   String         @default("") @map("price_text")
+  status      WishItemStatus @default(IDEA)
+  sortOrder   Int            @default(0) @map("sort_order")
+  fulfilledAt DateTime?      @map("fulfilled_at")
+  createdAt   DateTime       @default(now()) @map("created_at")
+  updatedAt   DateTime       @updatedAt @map("updated_at")
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  list      WishList  @relation(fields: [listId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, listId, status, sortOrder])
+  @@map("wish_items")
 }
 
 model ProjectNote {

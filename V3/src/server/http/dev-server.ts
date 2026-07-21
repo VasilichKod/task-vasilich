@@ -12,6 +12,15 @@ import {
 import { handleSaveAchievementsStateRequest } from '../api/achievements/index.js';
 import { handleSavePlanningStateRequest } from '../api/planning/index.js';
 import {
+  handleCreateWishItemRequest,
+  handleCreateWishListRequest,
+  handleDeleteWishItemRequest,
+  handleDeleteWishListRequest,
+  handleGetWishlistRequest,
+  handleUpdateWishItemRequest,
+  handleUpdateWishListRequest,
+} from '../api/wishlist/index.js';
+import {
   handleCreateProjectNoteRequest,
   handleCreateProjectNoteSectionRequest,
   handleDeleteProjectNoteSectionRequest,
@@ -138,6 +147,10 @@ async function route(request: Request) {
     return serveStaticAsset('style-v3.css');
   }
 
+  if (request.method === 'GET' && url.pathname === '/features-v3.css') {
+    return serveStaticAsset('features-v3.css');
+  }
+
   if (request.method === 'GET' && url.pathname === '/app-v3.js') {
     return serveStaticAsset('app-v3.js');
   }
@@ -201,6 +214,36 @@ async function route(request: Request) {
 
   if (request.method === 'PATCH' && url.pathname === '/api/achievements-state') {
     return withCors(request, await handleSaveAchievementsStateRequest(request));
+  }
+
+  if (request.method === 'GET' && url.pathname === '/api/wishlist') {
+    return withCors(request, await handleGetWishlistRequest(request));
+  }
+
+  if (request.method === 'POST' && url.pathname === '/api/wishlist/lists') {
+    return withCors(request, await handleCreateWishListRequest(request));
+  }
+
+  const wishListMatch = url.pathname.match(/^\/api\/wishlist\/lists\/([^/]+)$/);
+  if (request.method === 'PATCH' && wishListMatch) {
+    return withCors(request, await handleUpdateWishListRequest(request, wishListMatch[1]));
+  }
+
+  if (request.method === 'DELETE' && wishListMatch) {
+    return withCors(request, await handleDeleteWishListRequest(request, wishListMatch[1]));
+  }
+
+  if (request.method === 'POST' && url.pathname === '/api/wishlist/items') {
+    return withCors(request, await handleCreateWishItemRequest(request));
+  }
+
+  const wishItemMatch = url.pathname.match(/^\/api\/wishlist\/items\/([^/]+)$/);
+  if (request.method === 'PATCH' && wishItemMatch) {
+    return withCors(request, await handleUpdateWishItemRequest(request, wishItemMatch[1]));
+  }
+
+  if (request.method === 'DELETE' && wishItemMatch) {
+    return withCors(request, await handleDeleteWishItemRequest(request, wishItemMatch[1]));
   }
 
   const projectNotesMatch = url.pathname.match(/^\/api\/projects\/([^/]+)\/notes$/);

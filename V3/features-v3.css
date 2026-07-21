@@ -1,0 +1,185 @@
+/* Balance */
+.balance-shell { display: flex; flex-direction: column; gap: 18px; }
+.balance-toolbar {
+  display: grid; grid-template-columns: auto minmax(190px, 1fr) auto;
+  align-items: center; gap: 14px; padding: 10px 0 14px;
+  border-bottom: 1px solid var(--border);
+}
+.balance-period-tabs, .wishlist-status-tabs {
+  display: inline-flex; align-items: center; gap: 2px; padding: 3px;
+  border: 1px solid var(--border); background: var(--bg2);
+}
+.balance-period-tabs button, .wishlist-status-tabs button {
+  min-height: 30px; padding: 0 11px; border: none; background: transparent;
+  color: var(--text2); font: 500 11px/1 var(--font-sans); text-transform: none;
+}
+.balance-period-tabs button.active, .wishlist-status-tabs button.active {
+  background: var(--surface); color: var(--text); box-shadow: 0 1px 2px rgba(20, 20, 18, 0.08);
+}
+.balance-period-nav { display: flex; align-items: center; justify-content: center; gap: 10px; }
+.balance-period-nav button { width: 30px; min-height: 30px; padding: 0; background: var(--surface); color: var(--text2); }
+.balance-period-nav strong {
+  min-width: 148px; color: var(--text); font: 600 12px/1 var(--font-sans);
+  text-align: center; text-transform: capitalize;
+}
+.balance-filters { display: flex; gap: 8px; }
+.balance-filters select { width: auto; min-width: 150px; min-height: 34px; padding: 0 30px 0 10px; font-size: 11px; }
+.balance-overview {
+  display: grid; grid-template-columns: minmax(0, 1.08fr) minmax(320px, 0.92fr);
+  border: 1px solid var(--border); background: var(--surface);
+}
+.balance-wheel-panel, .balance-groups-panel, .balance-projects-panel { padding: 20px; }
+.balance-groups-panel { border-left: 1px solid var(--border); }
+.balance-section-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.balance-kicker, .wishlist-kicker {
+  display: block; margin-bottom: 6px; color: var(--text3);
+  font: 500 9px/1 var(--font-mono); letter-spacing: 0.1em; text-transform: uppercase;
+}
+.balance-section-heading h2, .wishlist-toolbar h2 {
+  color: var(--text); font: 650 16px/1.25 var(--font-sans); letter-spacing: -0.015em;
+}
+.balance-method-note { color: var(--text3); font: 400 10px/1.3 var(--font-mono); text-align: right; }
+.balance-wheel-wrap { display: grid; min-height: 330px; place-items: center; }
+.balance-wheel-svg { width: min(100%, 330px); height: auto; overflow: visible; }
+.balance-wheel-value { fill: var(--text); font: 650 22px/1 var(--font-mono); }
+.balance-wheel-label { fill: var(--text3); font: 500 9px/1 var(--font-mono); letter-spacing: 0.08em; text-transform: uppercase; }
+.balance-wheel-empty, .balance-empty { color: var(--text3); font: 400 11px/1.5 var(--font-mono); text-align: center; }
+.balance-summary-numbers { display: grid; grid-template-columns: repeat(3, 1fr); border-top: 1px solid var(--border); }
+.balance-summary-numbers > div {
+  display: flex; min-width: 0; flex-direction: column; gap: 4px;
+  padding: 14px 10px 0; border-left: 1px solid var(--border);
+}
+.balance-summary-numbers > div:first-child { border-left: none; padding-left: 0; }
+.balance-summary-numbers strong { color: var(--text); font: 600 20px/1 var(--font-mono); }
+.balance-summary-numbers span { color: var(--text3); font: 400 10px/1.3 var(--font-sans); }
+.balance-group-list { display: flex; flex-direction: column; gap: 18px; margin-top: 28px; }
+.balance-group-row { display: flex; flex-direction: column; gap: 7px; }
+.balance-group-row-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.balance-group-row-head > span { display: flex; align-items: center; gap: 8px; color: var(--text); font: 600 12px/1 var(--font-sans); }
+.balance-group-row-head i { width: 7px; height: 7px; border-radius: 50%; }
+.balance-group-row-head strong { color: var(--text); font: 600 12px/1 var(--font-mono); }
+.balance-progress { height: 5px; overflow: hidden; background: var(--bg3); }
+.balance-progress span { display: block; height: 100%; transition: width var(--t-mid); }
+.balance-group-meta { color: var(--text3); font: 400 10px/1 var(--font-mono); }
+.balance-projects-panel { border: 1px solid var(--border); background: var(--surface); }
+.balance-project-list { margin-top: 16px; border-top: 1px solid var(--border); }
+.balance-project-row {
+  display: grid; grid-template-columns: 36px 34px minmax(0, 1fr) auto;
+  align-items: center; gap: 10px; min-height: 64px; border-bottom: 1px solid var(--border);
+}
+.balance-project-row.excluded { opacity: 0.5; }
+.balance-project-toggle {
+  position: relative; width: 30px; min-height: 17px; padding: 0;
+  border-color: var(--border2); border-radius: 10px; background: var(--bg3);
+}
+.balance-project-toggle span {
+  position: absolute; left: 2px; top: 2px; width: 11px; height: 11px;
+  border-radius: 50%; background: var(--text3); transition: transform var(--t-mid), background var(--t-mid);
+}
+.balance-project-toggle.on { border-color: var(--text); background: var(--text); }
+.balance-project-toggle.on span { transform: translateX(13px); background: var(--accent); }
+.balance-project-copy { display: flex; min-width: 0; flex-direction: column; gap: 3px; }
+.balance-project-copy strong { overflow: hidden; color: var(--text); font: 600 12px/1.2 var(--font-sans); text-overflow: ellipsis; white-space: nowrap; }
+.balance-project-copy span { color: var(--text3); font: 400 10px/1 var(--font-sans); }
+.balance-project-result { display: flex; min-width: 96px; flex-direction: column; align-items: flex-end; gap: 3px; }
+.balance-project-result strong { color: var(--text3); font: 600 15px/1 var(--font-mono); }
+.balance-project-result.touched strong { color: var(--green); }
+.balance-project-result span { color: var(--text3); font: 400 9px/1 var(--font-mono); }
+
+/* Wishlist */
+.wishlist-shell { display: flex; min-width: 0; flex-direction: column; gap: 16px; }
+.wishlist-toolbar {
+  display: flex; align-items: flex-end; justify-content: space-between; gap: 20px;
+  padding: 8px 0 14px; border-bottom: 1px solid var(--border);
+}
+.wishlist-status-tabs button span { margin-left: 4px; color: var(--text3); font-family: var(--font-mono); }
+.wishlist-board { display: flex; align-items: flex-start; gap: 12px; min-width: 0; padding-bottom: 14px; overflow-x: auto; }
+.wishlist-column { flex: 0 0 min(320px, calc(100vw - 40px)); border-top: 3px solid var(--wish-list-color); background: var(--bg2); }
+.wishlist-column-head {
+  display: flex; align-items: center; justify-content: space-between;
+  min-height: 48px; padding: 0 10px 0 12px; border-bottom: 1px solid var(--border);
+}
+.wishlist-column-head > div { display: flex; min-width: 0; align-items: center; gap: 8px; }
+.wishlist-column-head i { width: 7px; height: 7px; flex: 0 0 7px; border-radius: 50%; background: var(--wish-list-color); }
+.wishlist-column-head strong { overflow: hidden; color: var(--text); font: 650 13px/1 var(--font-sans); text-overflow: ellipsis; white-space: nowrap; }
+.wishlist-column-head span { color: var(--text3); font: 400 10px/1 var(--font-mono); }
+.wishlist-column-head button {
+  width: 30px; min-height: 30px; padding: 0; border-color: transparent;
+  background: transparent; color: var(--text3); letter-spacing: 0.08em;
+}
+.wishlist-column-items { display: flex; flex-direction: column; gap: 8px; padding: 10px; }
+.wish-card {
+  padding: 12px; border: 1px solid var(--border); background: var(--surface);
+  cursor: pointer; transition: border-color var(--t-fast), transform var(--t-fast);
+}
+.wish-card:hover { border-color: var(--border3); transform: translateY(-1px); }
+.wish-card:active { transform: translateY(0); }
+.wish-card.fulfilled { opacity: 0.62; }
+.wish-card.fulfilled h3 { text-decoration: line-through; text-decoration-color: var(--text3); }
+.wish-card-topline { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 9px; }
+.wish-card-topline > strong { color: var(--text); font: 600 11px/1 var(--font-mono); }
+.wish-status { color: var(--text3); font: 500 8px/1 var(--font-mono); letter-spacing: 0.08em; text-transform: uppercase; }
+.wish-status.planned { color: #9b650d; }
+.wish-status.fulfilled { color: var(--green); }
+.wish-card h3 { color: var(--text); font: 650 14px/1.3 var(--font-sans); text-wrap: pretty; }
+.wish-card p {
+  display: -webkit-box; margin-top: 7px; overflow: hidden; color: var(--text2);
+  font: 400 11px/1.45 var(--font-sans); -webkit-box-orient: vertical; -webkit-line-clamp: 3;
+}
+.wish-card footer { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 12px; padding-top: 9px; border-top: 1px solid var(--border); }
+.wish-card footer a { color: var(--text2); font: 500 10px/1 var(--font-sans); text-decoration: underline; text-underline-offset: 2px; }
+.wish-card footer button { min-height: 26px; padding: 0 8px; border-color: transparent; background: var(--bg2); color: var(--text2); font: 500 9px/1 var(--font-sans); text-transform: none; }
+.wishlist-column-empty { padding: 26px 10px; color: var(--text3); font: 400 10px/1.45 var(--font-mono); text-align: center; }
+.wishlist-add-card {
+  width: calc(100% - 20px); min-height: 36px; margin: 0 10px 10px;
+  border-color: transparent; background: transparent; color: var(--text3);
+  font: 500 10px/1 var(--font-sans); text-align: left; text-transform: none;
+}
+.wishlist-add-card:hover { background: var(--bg3); color: var(--text); }
+.wishlist-add-list {
+  flex: 0 0 210px; min-height: 48px; border: 1px dashed var(--border2);
+  background: transparent; color: var(--text3); font: 500 11px/1 var(--font-sans); text-transform: none;
+}
+.wishlist-first-list {
+  display: flex; min-height: 360px; align-items: center; justify-content: center;
+  flex-direction: column; padding: 40px 20px; border: 1px dashed var(--border2); text-align: center;
+}
+.wishlist-first-mark { margin-bottom: 16px; color: var(--text3); font-size: 38px; }
+.wishlist-first-list h2 { color: var(--text); font: 650 18px/1.2 var(--font-sans); }
+.wishlist-first-list p { max-width: 420px; margin: 8px 0 18px; color: var(--text2); font: 400 12px/1.5 var(--font-sans); }
+.wishlist-loading { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.wishlist-loading span { display: block; height: 280px; background: linear-gradient(90deg, var(--bg2), var(--bg3), var(--bg2)); background-size: 200% 100%; animation: wishlist-shimmer 1.2s linear infinite; }
+@keyframes wishlist-shimmer { to { background-position: -200% 0; } }
+.wishlist-error { display: flex; min-height: 220px; align-items: center; justify-content: center; flex-direction: column; gap: 12px; color: var(--text2); }
+.project-balance-check { align-items: flex-start; margin-top: 2px; padding: 10px 0; }
+.project-balance-check > span { display: flex; flex-direction: column; gap: 4px; }
+.project-balance-check strong { font: 600 12px/1 var(--font-sans); }
+.project-balance-check small { color: var(--text3); font: 400 10px/1.3 var(--font-sans); }
+
+@media (max-width: 980px) {
+  .balance-toolbar { grid-template-columns: 1fr 1fr; }
+  .balance-filters { grid-column: 1 / -1; }
+  .balance-filters select { flex: 1; }
+  .balance-overview { grid-template-columns: 1fr; }
+  .balance-groups-panel { border-top: 1px solid var(--border); border-left: none; }
+}
+
+@media (max-width: 768px) {
+  .mobile-nav { grid-template-columns: repeat(6, 1fr); }
+  .mobile-nav-text { font-size: 8px; }
+  .balance-toolbar { display: flex; align-items: stretch; flex-direction: column; }
+  .balance-period-tabs { align-self: flex-start; }
+  .balance-filters { display: grid; grid-template-columns: 1fr 1fr; }
+  .balance-filters select { min-width: 0; width: 100%; }
+  .balance-wheel-panel, .balance-groups-panel, .balance-projects-panel { padding: 14px; }
+  .balance-wheel-wrap { min-height: 280px; }
+  .balance-method-note { display: none; }
+  .balance-summary-numbers span { font-size: 9px; }
+  .balance-project-row { grid-template-columns: 32px 30px minmax(0, 1fr) auto; gap: 7px; }
+  .balance-project-result { min-width: 66px; }
+  .balance-project-result span { max-width: 72px; text-align: right; }
+  .wishlist-toolbar { align-items: flex-start; flex-direction: column; }
+  .wishlist-status-tabs { width: 100%; }
+  .wishlist-status-tabs button { flex: 1; padding: 0 6px; }
+  .wishlist-board { margin-right: -12px; }
+}

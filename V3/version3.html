@@ -13,6 +13,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <link rel="stylesheet" href="./style-v3.css" />
+  <link rel="stylesheet" href="./features-v3.css" />
 </head>
 <body>
   <div id="splash">
@@ -113,11 +114,17 @@
           </span>
           <span class="sidebar-link-text">Достижения</span>
         </button>
-        <button class="sidebar-link" type="button" title="История и аналитика" data-view="history" onclick="switchView('history')">
+        <button class="sidebar-link" type="button" title="Баланс" data-view="history" onclick="switchView('history')">
           <span class="sidebar-link-icon">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
           </span>
-          <span class="sidebar-link-text">Аналитика</span>
+          <span class="sidebar-link-text">Баланс</span>
+        </button>
+        <button class="sidebar-link" type="button" title="Вишлист" data-view="wishlist" onclick="switchView('wishlist')">
+          <span class="sidebar-link-icon">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12l2 5-8 13L4 8z"/><path d="M4 8h16"/><path d="M9 3l3 5 3-5"/></svg>
+          </span>
+          <span class="sidebar-link-text">Вишлист</span>
         </button>
       </div>
 
@@ -219,6 +226,7 @@
       <section class="group-workspace-view" id="group-view" style="display:none"></section>
       <section class="archive-view" id="archive-view" style="display:none"></section>
       <section class="empty-view" id="history-view" style="display:none"></section>
+      <section class="wishlist-view" id="wishlist-view" style="display:none"></section>
       <section class="profile-view" id="profile-view" style="display:none"></section>
       <section class="settings-view" id="settings-view" style="display:none"></section>
 
@@ -247,11 +255,17 @@
         </span>
         <span class="mobile-nav-text">Достижения</span>
       </button>
-      <button class="mobile-nav-btn" type="button" title="Аналитика" data-view="history" onclick="switchView('history')">
+      <button class="mobile-nav-btn" type="button" title="Баланс" data-view="history" onclick="switchView('history')">
         <span class="mobile-nav-icon">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
         </span>
-        <span class="mobile-nav-text">Аналитика</span>
+        <span class="mobile-nav-text">Баланс</span>
+      </button>
+      <button class="mobile-nav-btn" type="button" title="Вишлист" data-view="wishlist" onclick="switchView('wishlist')">
+        <span class="mobile-nav-icon">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12l2 5-8 13L4 8z"/><path d="M4 8h16"/><path d="M9 3l3 5 3-5"/></svg>
+        </span>
+        <span class="mobile-nav-text">Вишлист</span>
       </button>
       <button class="mobile-nav-btn mobile-nav-menu" type="button" title="Меню" onclick="toggleSidebar()">
         <span class="mobile-nav-icon">
@@ -433,6 +447,13 @@
         <span class="form-label">Цвет</span>
         <div class="color-picker" id="color-picker"></div>
       </div>
+      <label class="settings-check project-balance-check">
+        <span>
+          <strong>Учитывать в балансе</strong>
+          <small>Проект будет участвовать в сводке по периодам</small>
+        </span>
+        <input id="proj-balance-enabled" type="checkbox" checked />
+      </label>
       <div class="modal-actions modal-actions-right">
         <button id="manage-delete-btn" type="button" onclick="deleteProject()" style="display:none">В архив</button>
         <button class="primary" id="manage-save-btn" type="button" onclick="saveProject()">Сохранить</button>
@@ -539,6 +560,74 @@
       <div class="modal-actions modal-actions-right">
         <button id="achievement-delete-btn" type="button" onclick="deleteAchievement()" style="display:none">Удалить</button>
         <button class="primary" id="achievement-save-btn" type="button" onclick="saveAchievement()">Сохранить</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Wishlist item modal -->
+  <div class="modal-bg" id="wish-item-modal" onclick="handleModalBackdrop(event, 'wish-item')">
+    <div class="modal">
+      <div class="modal-header">
+        <div class="modal-title" id="wish-item-modal-title">Добавить покупку</div>
+        <button class="modal-close" type="button" onclick="closeWishItemModal()" aria-label="Закрыть">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <label class="field-group">
+        <span class="form-label">Что купить</span>
+        <input id="wish-item-title" maxlength="240" placeholder="Например: Наушники Sony" />
+      </label>
+      <label class="field-group">
+        <span class="form-label">Список / для кого</span>
+        <select id="wish-item-list-select"></select>
+      </label>
+      <label class="field-group">
+        <span class="form-label">Ссылка</span>
+        <input id="wish-item-url" maxlength="2000" inputmode="url" placeholder="https://..." />
+      </label>
+      <label class="field-group">
+        <span class="form-label">Цена или ориентир</span>
+        <input id="wish-item-price" maxlength="120" placeholder="Например: 18 000 ₽" />
+      </label>
+      <label class="field-group">
+        <span class="form-label">Комментарий</span>
+        <textarea id="wish-item-note" maxlength="4000" placeholder="Размер, цвет, модель или почему выбрал"></textarea>
+      </label>
+      <label class="field-group">
+        <span class="form-label">Статус</span>
+        <select id="wish-item-status">
+          <option value="IDEA">Идея</option>
+          <option value="PLANNED">Запланировано</option>
+          <option value="FULFILLED">Куплено</option>
+        </select>
+      </label>
+      <div class="modal-actions modal-actions-balanced">
+        <button id="wish-item-delete-btn" type="button" onclick="deleteWishItem()" style="display:none">Удалить</button>
+        <button class="primary" id="wish-item-save-btn" type="button" onclick="saveWishItem()">Добавить</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Wishlist list modal -->
+  <div class="modal-bg" id="wish-list-modal" onclick="handleModalBackdrop(event, 'wish-list')">
+    <div class="modal">
+      <div class="modal-header">
+        <div class="modal-title" id="wish-list-modal-title">Новый список</div>
+        <button class="modal-close" type="button" onclick="closeWishListModal()" aria-label="Закрыть">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <label class="field-group">
+        <span class="form-label">Название</span>
+        <input id="wish-list-name" maxlength="120" placeholder="Например: Для Аси" />
+      </label>
+      <div class="field-group">
+        <span class="form-label">Цвет</span>
+        <div class="color-picker" id="wish-list-color-picker"></div>
+      </div>
+      <div class="modal-actions modal-actions-balanced">
+        <button id="wish-list-delete-btn" type="button" onclick="deleteWishList()" style="display:none">Удалить список</button>
+        <button class="primary" id="wish-list-save-btn" type="button" onclick="saveWishList()">Создать</button>
       </div>
     </div>
   </div>

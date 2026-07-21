@@ -60,6 +60,10 @@ let state = {
     groups: [],
     subs: [],
   },
+  wishlist: {
+    lists: [],
+    items: [],
+  },
 };
 
 let _taskMeta = null;
@@ -92,6 +96,16 @@ let projectNotesLoadingProjectId = null;
 let projectNotesError = '';
 let manageProjectNoteId = null;
 let manageProjectNoteSectionId = null;
+let manageWishItemId = null;
+let manageWishListId = null;
+let newWishListColor = COLORS[0];
+let wishlistLoading = false;
+let wishlistError = '';
+let wishlistStatusFilter = 'ACTIVE';
+let balancePeriod = 'week';
+let balanceOffset = 0;
+let balanceGroupFilter = 'all';
+let balanceProjectFilter = 'all';
 let _sidebarDragMeta = null;
 let _planningSyncTimer = null;
 let _lastPlanningSyncSignature = '';
@@ -115,6 +129,7 @@ const NAVIGABLE_VIEWS = new Set([
   'history',
   'profile',
   'settings',
+  'wishlist',
 ]);
 
 const DEFAULT_PROFILE = {
@@ -395,7 +410,61 @@ function toCatalogProjects(projects) {
     lastActivityAt: project.lastActivityAt || '',
     updatedAt: project.updatedAt || '',
     archivedAt: project.archivedAt || '',
+    balanceEnabled: project.balanceEnabled !== false,
   }));
+}
+
+function normalizeWishlistPayload(payload) {
+  return {
+    lists: (payload?.lists || []).map((list, index) => ({
+      id: list.id,
+      name: list.name || `Список ${index + 1}`,
+      color: normalizeColor(list.color, COLORS[index % COLORS.length]),
+      sortOrder: Number(list.sortOrder || 0),
+      createdAt: list.createdAt || '',
+      updatedAt: list.updatedAt || '',
+    })),
+    items: (payload?.items || []).map(item => ({
+      id: item.id,
+      listId: item.listId,
+      title: item.title || '',
+      note: item.note || '',
+      url: item.url || '',
+      priceText: item.priceText || '',
+      status: ['IDEA', 'PLANNED', 'FULFILLED'].includes(item.status) ? item.status : 'IDEA',
+      sortOrder: Number(item.sortOrder || 0),
+      fulfilledAt: item.fulfilledAt || '',
+      createdAt: item.createdAt || '',
+      updatedAt: item.updatedAt || '',
+    })).filter(item => item.title.trim()),
+  };
+}
+
+async function fetchWishlistFromServer() {
+  return apiJson('/api/wishlist', { method: 'GET', headers: {} });
+}
+
+async function syncWishlistFromServer() {
+  wishlistLoading = true;
+  wishlistError = '';
+  try {
+    let payload = await fetchWishlistFromServer();
+    if (!(payload?.lists || []).length) {
+      await apiJson('/api/wishlist/lists', {
+        method: 'POST',
+        body: JSON.stringify({ name: 'Для себя', color: COLORS[0] }),
+      });
+      payload = await fetchWishlistFromServer();
+    }
+    state.wishlist = normalizeWishlistPayload(payload);
+    return state.wishlist;
+  } catch (error) {
+    console.error('WISHLIST_SYNC_FAILED', error);
+    wishlistError = 'Не удалось загрузить вишлист.';
+    return state.wishlist;
+  } finally {
+    wishlistLoading = false;
+  }
 }
 
 function setAuthError(message = '') {
@@ -981,6 +1050,7 @@ async function submitLogin(event) {
     await syncCatalogFromServer();
     await syncAccountFromServer();
     await syncPlanningFromServer();
+    await syncWishlistFromServer();
     await loadAdminStats({ silent: true });
     if (!restoreNavigationStateForCurrentUser()) {
       state.currentView = state.settings.defaultView || 'graph';
@@ -1045,6 +1115,7 @@ async function submitRegister(event) {
     await syncCatalogFromServer();
     await syncAccountFromServer();
     await syncPlanningFromServer();
+    await syncWishlistFromServer();
     await loadAdminStats({ silent: true });
     state.currentView = state.settings.defaultView || 'graph';
     save();
@@ -1085,6 +1156,11 @@ async function logoutUser() {
   projectNotesError = '';
   manageProjectNoteId = null;
   manageProjectNoteSectionId = null;
+  manageWishItemId = null;
+  manageWishListId = null;
+  state.wishlist = { lists: [], items: [] };
+  wishlistError = '';
+  wishlistLoading = false;
   showAuthShell();
 }
 
@@ -1127,6 +1203,7 @@ function normalizeSubs(subs, groups) {
     activityScore: Number(sub.activityScore || 0),
     lastActivityAt: sub.lastActivityAt || '',
     updatedAt: sub.updatedAt || '',
+    balanceEnabled: sub.balanceEnabled !== false,
   }));
 }
 
@@ -1800,6 +1877,7 @@ function load() {
   ensureProjectTemplates();
   state.dayProjects = normalizeDayProjects({});
   state.dayColumnWidths = {};
+  state.wishlist = { lists: [], items: [] };
 }
 
 async function fetchCatalogFromServer() {
@@ -2098,6 +2176,7 @@ function renderCurrentView() {
   const groupView = document.getElementById('group-view');
   const archiveView = document.getElementById('archive-view');
   const historyView = document.getElementById('history-view');
+  const wishlistView = document.getElementById('wishlist-view');
   const profileView = document.getElementById('profile-view');
   const settingsView = document.getElementById('settings-view');
   const statsBar = document.getElementById('stats-bar');
@@ -2114,6 +2193,7 @@ function renderCurrentView() {
   groupView.style.display = state.currentView === 'group' ? 'block' : 'none';
   archiveView.style.display = state.currentView === 'archive' ? 'block' : 'none';
   historyView.style.display = state.currentView === 'history' ? 'block' : 'none';
+  wishlistView.style.display = state.currentView === 'wishlist' ? 'block' : 'none';
   profileView.style.display = state.currentView === 'profile' ? 'block' : 'none';
   settingsView.style.display = state.currentView === 'settings' ? 'block' : 'none';
   document.getElementById('ai-section').style.display = 'none';
@@ -2222,6 +2302,28 @@ function renderCurrentView() {
     return;
   }
 
+  if (state.currentView === 'history') {
+    pageTitle.textContent = 'Баланс';
+    createBtn.style.display = 'none';
+    addProjectBtn.style.display = 'none';
+    carryBtn.style.display = 'none';
+    renderBalanceView();
+    return;
+  }
+
+  if (state.currentView === 'wishlist') {
+    pageTitle.textContent = 'Вишлист';
+    createBtn.style.display = 'inline-flex';
+    createBtn.textContent = '+ покупка';
+    createBtn.onclick = () => openWishItemModal();
+    addProjectBtn.style.display = 'inline-flex';
+    addProjectBtn.textContent = '+ список';
+    addProjectBtn.onclick = () => openWishListModal();
+    carryBtn.style.display = 'none';
+    renderWishlistView();
+    return;
+  }
+
   if (state.currentView === 'profile') {
     pageTitle.textContent = 'Профиль';
     createBtn.style.display = 'none';
@@ -2244,8 +2346,618 @@ function renderCurrentView() {
   addProjectBtn.style.display = 'none';
   carryBtn.style.display = 'none';
 
-  pageTitle.textContent = 'История и аналитика';
-  historyView.innerHTML = '<div class="empty-note">Экран истории и аналитики пока пустой. Дальше сюда можно вынести прошлые недели, статистику и ИИ-разбор.</div>';
+  pageTitle.textContent = 'График';
+}
+
+function parseWeekKeyDate(wk) {
+  const match = /^w(\d{4})(\d{2})(\d{2})$/.exec(String(wk || ''));
+  if (!match) return null;
+  const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+  date.setHours(0, 0, 0, 0);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function getBalancePeriodBounds() {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  let start;
+  let end;
+
+  if (balancePeriod === 'month') {
+    start = new Date(today.getFullYear(), today.getMonth() + balanceOffset, 1);
+    end = new Date(start.getFullYear(), start.getMonth() + 1, 1);
+  } else if (balancePeriod === 'year') {
+    start = new Date(today.getFullYear() + balanceOffset, 0, 1);
+    end = new Date(start.getFullYear() + 1, 0, 1);
+  } else {
+    const day = today.getDay() || 7;
+    start = new Date(today);
+    start.setDate(today.getDate() - day + 1 + balanceOffset * 7);
+    end = new Date(start);
+    end.setDate(start.getDate() + 7);
+  }
+
+  const short = date => date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' });
+  const label = balancePeriod === 'year'
+    ? String(start.getFullYear())
+    : balancePeriod === 'month'
+      ? start.toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' })
+      : `${short(start)} — ${short(new Date(end.getTime() - 86_400_000))}`;
+
+  return { start, end, label };
+}
+
+function getBalanceCompletedCounts(start, end) {
+  const counts = Object.fromEntries(state.subs.map(project => [project.id, 0]));
+  const inRange = date => date && date >= start && date < end;
+
+  Object.entries(state.data || {}).forEach(([wk, projectMap]) => {
+    const monday = parseWeekKeyDate(wk);
+    if (!monday) return;
+    Object.entries(projectMap || {}).forEach(([projectId, dayMap]) => {
+      Object.entries(dayMap || {}).forEach(([dayIdx, tasks]) => {
+        const date = new Date(monday);
+        date.setDate(monday.getDate() + Number(dayIdx));
+        if (!inRange(date)) return;
+        const doneCount = (tasks || []).filter(task => task.done).length;
+        counts[projectId] = (counts[projectId] || 0) + doneCount;
+      });
+    });
+  });
+
+  const recurringById = new Map((state.recurring || []).map(task => [task.id, task]));
+  Object.entries(state.recurringStatus || {}).forEach(([wk, statusMap]) => {
+    const monday = parseWeekKeyDate(wk);
+    if (!monday) return;
+    Object.entries(statusMap || {}).forEach(([recurringId, status]) => {
+      if (!status?.done) return;
+      const recurring = recurringById.get(recurringId);
+      if (!recurring) return;
+      const date = new Date(monday);
+      date.setDate(monday.getDate() + Number(recurring.dayIdx || 0));
+      if (!inRange(date)) return;
+      counts[recurring.subId] = (counts[recurring.subId] || 0) + 1;
+    });
+  });
+
+  return counts;
+}
+
+function getBalanceReport() {
+  const bounds = getBalancePeriodBounds();
+  const completedCounts = getBalanceCompletedCounts(bounds.start, bounds.end);
+  const scopedProjects = state.subs.filter(project => {
+    if (balanceGroupFilter !== 'all' && project.group !== balanceGroupFilter) return false;
+    if (balanceProjectFilter !== 'all' && project.id !== balanceProjectFilter) return false;
+    return true;
+  });
+  const includedProjects = scopedProjects.filter(project => project.balanceEnabled !== false);
+  const touchedProjects = includedProjects.filter(project => (completedCounts[project.id] || 0) > 0);
+  const overallScore = includedProjects.length
+    ? Math.round(touchedProjects.length / includedProjects.length * 100)
+    : 0;
+  const groupStats = state.groups
+    .filter(group => balanceGroupFilter === 'all' || group.id === balanceGroupFilter)
+    .map(group => {
+      const projects = includedProjects.filter(project => project.group === group.id);
+      const touched = projects.filter(project => (completedCounts[project.id] || 0) > 0);
+      return {
+        ...group,
+        projects,
+        touched,
+        completed: projects.reduce((sum, project) => sum + (completedCounts[project.id] || 0), 0),
+        score: projects.length ? Math.round(touched.length / projects.length * 100) : 0,
+      };
+    });
+
+  return {
+    ...bounds,
+    completedCounts,
+    scopedProjects,
+    includedProjects,
+    touchedProjects,
+    overallScore,
+    groupStats,
+  };
+}
+
+function polarPoint(cx, cy, radius, angle) {
+  return {
+    x: cx + Math.cos(angle) * radius,
+    y: cy + Math.sin(angle) * radius,
+  };
+}
+
+function balanceSectorPath(cx, cy, innerRadius, outerRadius, startAngle, endAngle) {
+  if (outerRadius <= innerRadius + 0.5) return '';
+  const outerStart = polarPoint(cx, cy, outerRadius, startAngle);
+  const outerEnd = polarPoint(cx, cy, outerRadius, endAngle);
+  const innerEnd = polarPoint(cx, cy, innerRadius, endAngle);
+  const innerStart = polarPoint(cx, cy, innerRadius, startAngle);
+  const largeArc = endAngle - startAngle > Math.PI ? 1 : 0;
+  return [
+    `M ${outerStart.x.toFixed(2)} ${outerStart.y.toFixed(2)}`,
+    `A ${outerRadius} ${outerRadius} 0 ${largeArc} 1 ${outerEnd.x.toFixed(2)} ${outerEnd.y.toFixed(2)}`,
+    `L ${innerEnd.x.toFixed(2)} ${innerEnd.y.toFixed(2)}`,
+    `A ${innerRadius} ${innerRadius} 0 ${largeArc} 0 ${innerStart.x.toFixed(2)} ${innerStart.y.toFixed(2)}`,
+    'Z',
+  ].join(' ');
+}
+
+function buildBalanceWheel(groupStats, overallScore) {
+  const visible = groupStats.filter(group => group.projects.length);
+  if (!visible.length) {
+    return '<div class="balance-wheel-empty">Выбери проекты, которые нужно учитывать</div>';
+  }
+
+  const cx = 160;
+  const cy = 160;
+  const innerRadius = 48;
+  const maxRadius = 130;
+  const step = Math.PI * 2 / visible.length;
+  const gap = Math.min(0.08, step * 0.12);
+  const paths = visible.map((group, index) => {
+    const start = -Math.PI / 2 + index * step + gap;
+    const end = -Math.PI / 2 + (index + 1) * step - gap;
+    const outer = innerRadius + (maxRadius - innerRadius) * group.score / 100;
+    const backgroundPath = balanceSectorPath(cx, cy, innerRadius, maxRadius, start, end);
+    const valuePath = balanceSectorPath(cx, cy, innerRadius, outer, start, end);
+    return `
+      <path d="${backgroundPath}" fill="${group.color}" opacity="0.09"></path>
+      ${valuePath ? `<path d="${valuePath}" fill="${group.color}" opacity="0.82"></path>` : ''}
+    `;
+  }).join('');
+
+  return `
+    <svg class="balance-wheel-svg" viewBox="0 0 320 320" role="img" aria-label="Баланс по группам ${overallScore}%">
+      ${paths}
+      <circle cx="160" cy="160" r="43" fill="#ffffff" stroke="rgba(0,0,0,.08)"></circle>
+      <text x="160" y="155" text-anchor="middle" class="balance-wheel-value">${overallScore}%</text>
+      <text x="160" y="177" text-anchor="middle" class="balance-wheel-label">охват</text>
+    </svg>
+  `;
+}
+
+function setBalancePeriod(period) {
+  if (!['week', 'month', 'year'].includes(period)) return;
+  balancePeriod = period;
+  balanceOffset = 0;
+  renderBalanceView();
+}
+
+function shiftBalancePeriod(delta) {
+  balanceOffset += Number(delta) || 0;
+  renderBalanceView();
+}
+
+function setBalanceGroupFilter(groupId) {
+  balanceGroupFilter = groupId || 'all';
+  const project = getSub(balanceProjectFilter);
+  if (balanceProjectFilter !== 'all' && (!project || (balanceGroupFilter !== 'all' && project.group !== balanceGroupFilter))) {
+    balanceProjectFilter = 'all';
+  }
+  renderBalanceView();
+}
+
+function setBalanceProjectFilter(projectId) {
+  balanceProjectFilter = projectId || 'all';
+  renderBalanceView();
+}
+
+async function toggleProjectBalance(projectId) {
+  const project = getSub(projectId);
+  if (!project) return;
+  const nextValue = project.balanceEnabled === false;
+  project.balanceEnabled = nextValue;
+  renderBalanceView();
+  try {
+    const saved = await apiJson(`/api/catalog/projects/${encodeURIComponent(projectId)}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ balanceEnabled: nextValue }),
+    });
+    project.balanceEnabled = saved.balanceEnabled !== false;
+  } catch (error) {
+    project.balanceEnabled = !nextValue;
+    renderBalanceView();
+    showToast('Не удалось изменить баланс проекта');
+  }
+}
+
+function renderBalanceView() {
+  const root = document.getElementById('history-view');
+  if (!root) return;
+  const report = getBalanceReport();
+  const filterProjects = state.subs.filter(project => balanceGroupFilter === 'all' || project.group === balanceGroupFilter);
+  const completedTotal = report.includedProjects.reduce(
+    (sum, project) => sum + (report.completedCounts[project.id] || 0),
+    0,
+  );
+
+  root.innerHTML = `
+    <div class="balance-shell">
+      <section class="balance-toolbar">
+        <div class="balance-period-tabs" role="tablist" aria-label="Период баланса">
+          ${[
+            ['week', 'Неделя'],
+            ['month', 'Месяц'],
+            ['year', 'Год'],
+          ].map(([id, label]) => `<button type="button" class="${balancePeriod === id ? 'active' : ''}" onclick="setBalancePeriod('${id}')">${label}</button>`).join('')}
+        </div>
+        <div class="balance-period-nav">
+          <button type="button" onclick="shiftBalancePeriod(-1)" aria-label="Предыдущий период">‹</button>
+          <strong>${escapeHtml(report.label)}</strong>
+          <button type="button" onclick="shiftBalancePeriod(1)" aria-label="Следующий период">›</button>
+        </div>
+        <div class="balance-filters">
+          <select aria-label="Фильтр по группе" onchange="setBalanceGroupFilter(this.value)">
+            <option value="all">Все группы</option>
+            ${state.groups.map(group => `<option value="${escapeHtml(group.id)}" ${balanceGroupFilter === group.id ? 'selected' : ''}>${escapeHtml(group.label)}</option>`).join('')}
+          </select>
+          <select aria-label="Фильтр по проекту" onchange="setBalanceProjectFilter(this.value)">
+            <option value="all">Все проекты</option>
+            ${filterProjects.map(project => `<option value="${escapeHtml(project.id)}" ${balanceProjectFilter === project.id ? 'selected' : ''}>${escapeHtml(project.label)}</option>`).join('')}
+          </select>
+        </div>
+      </section>
+
+      <section class="balance-overview">
+        <div class="balance-wheel-panel">
+          <div class="balance-section-heading">
+            <div>
+              <span class="balance-kicker">Сводка</span>
+              <h2>Охват активных проектов</h2>
+            </div>
+            <span class="balance-method-note">1 проект = 1 голос</span>
+          </div>
+          <div class="balance-wheel-wrap">${buildBalanceWheel(report.groupStats, report.overallScore)}</div>
+          <div class="balance-summary-numbers">
+            <div><strong>${report.touchedProjects.length}</strong><span>проектов затронуто</span></div>
+            <div><strong>${report.includedProjects.length}</strong><span>учитывается</span></div>
+            <div><strong>${completedTotal}</strong><span>дел выполнено</span></div>
+          </div>
+        </div>
+
+        <div class="balance-groups-panel">
+          <div class="balance-section-heading">
+            <div>
+              <span class="balance-kicker">Группы</span>
+              <h2>Где есть движение</h2>
+            </div>
+          </div>
+          <div class="balance-group-list">
+            ${report.groupStats.map(group => `
+              <div class="balance-group-row">
+                <div class="balance-group-row-head">
+                  <span><i style="background:${group.color}"></i>${escapeHtml(group.label)}</span>
+                  <strong>${group.projects.length ? `${group.score}%` : '—'}</strong>
+                </div>
+                <div class="balance-progress"><span style="width:${group.score}%;background:${group.color}"></span></div>
+                <div class="balance-group-meta">${group.touched.length} из ${group.projects.length} проектов · ${group.completed} дел</div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      </section>
+
+      <section class="balance-projects-panel">
+        <div class="balance-section-heading">
+          <div>
+            <span class="balance-kicker">Детали</span>
+            <h2>Проекты в балансе</h2>
+          </div>
+          <span class="balance-method-note">Отключай проекты на паузе</span>
+        </div>
+        <div class="balance-project-list">
+          ${report.scopedProjects.length ? report.scopedProjects.map(project => {
+            const group = getGroup(project.group);
+            const count = report.completedCounts[project.id] || 0;
+            const enabled = project.balanceEnabled !== false;
+            return `
+              <div class="balance-project-row${enabled ? '' : ' excluded'}">
+                <button class="balance-project-toggle${enabled ? ' on' : ''}" type="button" onclick="toggleProjectBalance(decodeInlineToken('${inlineToken(project.id)}'))" aria-label="${enabled ? 'Исключить' : 'Учитывать'} ${escapeHtml(project.label)}"><span></span></button>
+                <span class="sidebar-project-icon" style="--project-color:${project.color}" aria-hidden="true"><i></i><i></i><i></i></span>
+                <div class="balance-project-copy">
+                  <strong>${escapeHtml(project.label)}</strong>
+                  <span>${escapeHtml(group?.label || 'Без группы')}</span>
+                </div>
+                <div class="balance-project-result ${count > 0 ? 'touched' : ''}">
+                  <strong>${enabled ? count : '—'}</strong>
+                  <span>${enabled ? (count > 0 ? 'выполнено' : 'не затронут') : 'на паузе'}</span>
+                </div>
+              </div>
+            `;
+          }).join('') : '<div class="balance-empty">По этому фильтру проектов нет.</div>'}
+        </div>
+      </section>
+    </div>
+  `;
+}
+
+function getWishStatusLabel(status) {
+  if (status === 'PLANNED') return 'Запланировано';
+  if (status === 'FULFILLED') return 'Куплено';
+  return 'Идея';
+}
+
+function getSafeWishUrl(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  try {
+    const candidate = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+    const parsed = new URL(candidate);
+    return ['http:', 'https:'].includes(parsed.protocol) ? parsed.href : '';
+  } catch {
+    return '';
+  }
+}
+
+function setWishlistStatusFilter(filter) {
+  wishlistStatusFilter = ['ACTIVE', 'FULFILLED', 'ALL'].includes(filter) ? filter : 'ACTIVE';
+  renderWishlistView();
+}
+
+function wishMatchesStatus(item) {
+  if (wishlistStatusFilter === 'FULFILLED') return item.status === 'FULFILLED';
+  if (wishlistStatusFilter === 'ALL') return true;
+  return item.status !== 'FULFILLED';
+}
+
+function renderWishlistView() {
+  const root = document.getElementById('wishlist-view');
+  if (!root) return;
+  if (wishlistLoading) {
+    root.innerHTML = '<div class="wishlist-loading"><span></span><span></span><span></span></div>';
+    return;
+  }
+  if (wishlistError) {
+    root.innerHTML = `<div class="wishlist-error"><span>${escapeHtml(wishlistError)}</span><button type="button" onclick="retryWishlist()">Повторить</button></div>`;
+    return;
+  }
+
+  const lists = state.wishlist.lists;
+  const activeCount = state.wishlist.items.filter(item => item.status !== 'FULFILLED').length;
+  const fulfilledCount = state.wishlist.items.filter(item => item.status === 'FULFILLED').length;
+
+  root.innerHTML = `
+    <div class="wishlist-shell">
+      <section class="wishlist-toolbar">
+        <div>
+          <span class="wishlist-kicker">Покупки на потом</span>
+          <h2>Всё, что хочется не забыть</h2>
+        </div>
+        <div class="wishlist-status-tabs" role="tablist" aria-label="Статус покупок">
+          <button type="button" class="${wishlistStatusFilter === 'ACTIVE' ? 'active' : ''}" onclick="setWishlistStatusFilter('ACTIVE')">Активные <span>${activeCount}</span></button>
+          <button type="button" class="${wishlistStatusFilter === 'FULFILLED' ? 'active' : ''}" onclick="setWishlistStatusFilter('FULFILLED')">Куплено <span>${fulfilledCount}</span></button>
+          <button type="button" class="${wishlistStatusFilter === 'ALL' ? 'active' : ''}" onclick="setWishlistStatusFilter('ALL')">Все</button>
+        </div>
+      </section>
+
+      ${lists.length ? `
+        <div class="wishlist-board">
+          ${lists.map(list => {
+            const items = state.wishlist.items.filter(item => item.listId === list.id && wishMatchesStatus(item));
+            return `
+              <section class="wishlist-column" style="--wish-list-color:${list.color}">
+                <header class="wishlist-column-head">
+                  <div>
+                    <i></i>
+                    <strong>${escapeHtml(list.name)}</strong>
+                    <span>${items.length}</span>
+                  </div>
+                  <button type="button" onclick="openWishListModal(decodeInlineToken('${inlineToken(list.id)}'))" aria-label="Настройки ${escapeHtml(list.name)}">···</button>
+                </header>
+                <div class="wishlist-column-items">
+                  ${items.length ? items.map(item => {
+                    const safeUrl = getSafeWishUrl(item.url);
+                    return `
+                      <article class="wish-card${item.status === 'FULFILLED' ? ' fulfilled' : ''}" onclick="openWishItemModal(decodeInlineToken('${inlineToken(item.id)}'))">
+                        <div class="wish-card-topline">
+                          <span class="wish-status ${item.status.toLowerCase()}">${getWishStatusLabel(item.status)}</span>
+                          ${item.priceText ? `<strong>${escapeHtml(item.priceText)}</strong>` : ''}
+                        </div>
+                        <h3>${escapeHtml(item.title)}</h3>
+                        ${item.note ? `<p>${escapeHtml(item.note)}</p>` : ''}
+                        <footer>
+                          ${safeUrl ? `<a href="${escapeHtml(safeUrl)}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">Открыть ссылку</a>` : '<span></span>'}
+                          <button type="button" onclick="event.stopPropagation();toggleWishFulfilled(decodeInlineToken('${inlineToken(item.id)}'))">${item.status === 'FULFILLED' ? 'Вернуть' : 'Куплено'}</button>
+                        </footer>
+                      </article>
+                    `;
+                  }).join('') : '<div class="wishlist-column-empty">В этом списке пока пусто</div>'}
+                </div>
+                <button class="wishlist-add-card" type="button" onclick="openWishItemModal(null, decodeInlineToken('${inlineToken(list.id)}'))">+ Добавить покупку</button>
+              </section>
+            `;
+          }).join('')}
+          <button class="wishlist-add-list" type="button" onclick="openWishListModal()">+ Новый список</button>
+        </div>
+      ` : `
+        <div class="wishlist-first-list">
+          <span class="wishlist-first-mark">◇</span>
+          <h2>Создай первый список</h2>
+          <p>Например, «Для себя», «Для Аси» или «Дом».</p>
+          <button class="primary" type="button" onclick="openWishListModal()">+ Создать список</button>
+        </div>
+      `}
+    </div>
+  `;
+}
+
+async function retryWishlist() {
+  wishlistLoading = true;
+  wishlistError = '';
+  renderWishlistView();
+  await syncWishlistFromServer();
+  renderWishlistView();
+}
+
+function openWishItemModal(itemId = null, preferredListId = null) {
+  if (!state.wishlist.lists.length) {
+    openWishListModal();
+    showToast('Сначала создай список');
+    return;
+  }
+  manageWishItemId = itemId;
+  const item = state.wishlist.items.find(candidate => candidate.id === itemId);
+  const listId = item?.listId || preferredListId || state.wishlist.lists[0].id;
+  document.getElementById('wish-item-modal-title').textContent = item ? 'Покупка' : 'Добавить покупку';
+  document.getElementById('wish-item-title').value = item?.title || '';
+  document.getElementById('wish-item-url').value = item?.url || '';
+  document.getElementById('wish-item-price').value = item?.priceText || '';
+  document.getElementById('wish-item-note').value = item?.note || '';
+  document.getElementById('wish-item-status').value = item?.status || 'IDEA';
+  const select = document.getElementById('wish-item-list-select');
+  select.innerHTML = state.wishlist.lists.map(list => `<option value="${escapeHtml(list.id)}">${escapeHtml(list.name)}</option>`).join('');
+  select.value = listId;
+  document.getElementById('wish-item-delete-btn').style.display = item ? 'inline-flex' : 'none';
+  document.getElementById('wish-item-save-btn').textContent = item ? 'Сохранить' : 'Добавить';
+  document.getElementById('wish-item-modal').classList.add('open');
+  setTimeout(() => document.getElementById('wish-item-title').focus(), 0);
+}
+
+function closeWishItemModal() {
+  document.getElementById('wish-item-modal').classList.remove('open');
+  manageWishItemId = null;
+}
+
+async function saveWishItem() {
+  const title = document.getElementById('wish-item-title').value.trim();
+  const listId = document.getElementById('wish-item-list-select').value;
+  if (!title || !listId) return;
+  const button = document.getElementById('wish-item-save-btn');
+  const editingItemId = manageWishItemId;
+  button.disabled = true;
+  try {
+    const payload = {
+      listId,
+      title,
+      url: document.getElementById('wish-item-url').value.trim(),
+      priceText: document.getElementById('wish-item-price').value.trim(),
+      note: document.getElementById('wish-item-note').value.trim(),
+      status: document.getElementById('wish-item-status').value,
+    };
+    await apiJson(editingItemId
+      ? `/api/wishlist/items/${encodeURIComponent(editingItemId)}`
+      : '/api/wishlist/items', {
+      method: editingItemId ? 'PATCH' : 'POST',
+      body: JSON.stringify(payload),
+    });
+    await syncWishlistFromServer();
+    closeWishItemModal();
+    renderWishlistView();
+    showToast(editingItemId ? 'Покупка сохранена' : 'Покупка добавлена');
+  } catch (error) {
+    console.error(error);
+    showToast('Не удалось сохранить покупку');
+  } finally {
+    button.disabled = false;
+  }
+}
+
+function deleteWishItem() {
+  if (!manageWishItemId) return;
+  const itemId = manageWishItemId;
+  openConfirmModal({
+    title: 'Удалить покупку',
+    message: 'Карточка будет удалена из вишлиста.',
+    confirmText: 'Удалить',
+    danger: true,
+    onConfirm: async () => {
+      await apiJson(`/api/wishlist/items/${encodeURIComponent(itemId)}`, { method: 'DELETE', headers: {} });
+      await syncWishlistFromServer();
+      closeWishItemModal();
+      renderWishlistView();
+    },
+  });
+}
+
+async function toggleWishFulfilled(itemId) {
+  const item = state.wishlist.items.find(candidate => candidate.id === itemId);
+  if (!item) return;
+  const nextStatus = item.status === 'FULFILLED' ? 'IDEA' : 'FULFILLED';
+  item.status = nextStatus;
+  renderWishlistView();
+  try {
+    await apiJson(`/api/wishlist/items/${encodeURIComponent(itemId)}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status: nextStatus }),
+    });
+    await syncWishlistFromServer();
+    renderWishlistView();
+  } catch (error) {
+    console.error(error);
+    await syncWishlistFromServer();
+    renderWishlistView();
+  }
+}
+
+function openWishListModal(listId = null) {
+  manageWishListId = listId;
+  const list = state.wishlist.lists.find(candidate => candidate.id === listId);
+  newWishListColor = list?.color || COLORS[state.wishlist.lists.length % COLORS.length];
+  document.getElementById('wish-list-modal-title').textContent = list ? 'Настройки списка' : 'Новый список';
+  document.getElementById('wish-list-name').value = list?.name || '';
+  document.getElementById('wish-list-delete-btn').style.display = list ? 'inline-flex' : 'none';
+  document.getElementById('wish-list-save-btn').textContent = list ? 'Сохранить' : 'Создать';
+  renderColorPicker('wish-list-color-picker', newWishListColor, 'pickWishListColor');
+  document.getElementById('wish-list-modal').classList.add('open');
+  setTimeout(() => document.getElementById('wish-list-name').focus(), 0);
+}
+
+function pickWishListColor(color, element) {
+  newWishListColor = color;
+  document.querySelectorAll('#wish-list-color-picker .color-swatch').forEach(node => {
+    node.style.borderColor = 'transparent';
+  });
+  element.style.borderColor = '#1a1a18';
+}
+
+function closeWishListModal() {
+  document.getElementById('wish-list-modal').classList.remove('open');
+  manageWishListId = null;
+}
+
+async function saveWishList() {
+  const name = document.getElementById('wish-list-name').value.trim();
+  if (!name) return;
+  const button = document.getElementById('wish-list-save-btn');
+  button.disabled = true;
+  try {
+    await apiJson(manageWishListId
+      ? `/api/wishlist/lists/${encodeURIComponent(manageWishListId)}`
+      : '/api/wishlist/lists', {
+      method: manageWishListId ? 'PATCH' : 'POST',
+      body: JSON.stringify({ name, color: newWishListColor }),
+    });
+    await syncWishlistFromServer();
+    closeWishListModal();
+    renderWishlistView();
+  } catch (error) {
+    console.error(error);
+    showToast('Не удалось сохранить список');
+  } finally {
+    button.disabled = false;
+  }
+}
+
+function deleteWishList() {
+  if (!manageWishListId) return;
+  const listId = manageWishListId;
+  const itemCount = state.wishlist.items.filter(item => item.listId === listId).length;
+  openConfirmModal({
+    title: 'Удалить список',
+    message: itemCount
+      ? `Вместе со списком удалятся покупки: ${itemCount}.`
+      : 'Пустой список будет удалён.',
+    confirmText: 'Удалить',
+    danger: true,
+    onConfirm: async () => {
+      await apiJson(`/api/wishlist/lists/${encodeURIComponent(listId)}`, { method: 'DELETE', headers: {} });
+      await syncWishlistFromServer();
+      closeWishListModal();
+      renderWishlistView();
+    },
+  });
 }
 
 function renderSettingsPageTitle() {
@@ -4652,6 +5364,7 @@ function openManage(projectId = null, preferredGroupId = null) {
   document.getElementById('manage-save-btn').textContent = project ? 'Сохранить' : 'Создать';
   document.getElementById('manage-delete-btn').style.display = project ? 'inline-flex' : 'none';
   document.getElementById('manage-delete-btn').textContent = 'В архив';
+  document.getElementById('proj-balance-enabled').checked = project?.balanceEnabled !== false;
   renderProjectGroupOptions();
   renderColorPicker('color-picker', newProjColor, 'pickColor');
   document.getElementById('manage-modal').classList.add('open');
@@ -4722,6 +5435,7 @@ function removeProjectFromLocalState(projectId) {
 async function saveProject() {
   const name = document.getElementById('proj-name').value.trim();
   newProjGroup = document.getElementById('proj-group-select').value;
+  const balanceEnabled = document.getElementById('proj-balance-enabled').checked;
   if (!name) return;
 
   try {
@@ -4732,6 +5446,7 @@ async function saveProject() {
           groupId: newProjGroup,
           name,
           color: newProjColor,
+          balanceEnabled,
         }),
       });
     } else {
@@ -4741,6 +5456,7 @@ async function saveProject() {
           groupId: newProjGroup,
           name,
           color: newProjColor,
+          balanceEnabled,
         }),
       });
     }
@@ -5203,6 +5919,8 @@ function handleModalBackdrop(event, type) {
   if (type === 'group') closeGroupManage();
   if (type === 'recurring') closeRecurringManage();
   if (type === 'achievement') closeAchievementModal();
+  if (type === 'wish-item') closeWishItemModal();
+  if (type === 'wish-list') closeWishListModal();
   if (type === 'confirm') closeConfirmModal();
 }
 
@@ -5308,6 +6026,7 @@ async function initApp() {
     await syncCatalogFromServer();
     await syncAccountFromServer();
     await syncPlanningFromServer();
+    await syncWishlistFromServer();
     await loadAdminStats({ silent: true });
     if (!restoreNavigationStateForCurrentUser()) {
       state.currentView = state.settings.defaultView || 'graph';

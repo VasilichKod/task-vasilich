@@ -18,6 +18,7 @@ export const createProjectSchema = z.object({
   groupId: z.string().trim().min(1),
   name: z.string().trim().min(1).max(120),
   color: colorSchema,
+  balanceEnabled: z.boolean().optional(),
   sortOrder: z.number().int().min(0).optional(),
 });
 
@@ -25,6 +26,7 @@ export const updateProjectSchema = z.object({
   groupId: z.string().trim().min(1).optional(),
   name: z.string().trim().min(1).max(120).optional(),
   color: colorSchema.optional(),
+  balanceEnabled: z.boolean().optional(),
   sortOrder: z.number().int().min(0).optional(),
 });
 

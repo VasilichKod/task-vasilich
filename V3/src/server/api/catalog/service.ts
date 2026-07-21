@@ -271,7 +271,7 @@ export async function restoreGroup(userId: string, workspaceId: string, groupId:
 export async function createProject(
   userId: string,
   workspaceId: string,
-  input: { groupId: string; name: string; color: string; sortOrder?: number },
+  input: { groupId: string; name: string; color: string; balanceEnabled?: boolean; sortOrder?: number },
 ) {
   await requireWorkspaceMutationAccess(userId, workspaceId);
 
@@ -302,6 +302,7 @@ export async function createProject(
       groupId: input.groupId,
       name: input.name,
       color: input.color,
+      balanceEnabled: input.balanceEnabled ?? true,
       sortOrder: input.sortOrder ?? (lastProject?.sortOrder ?? -1) + 1,
     },
   });
@@ -311,7 +312,7 @@ export async function updateProject(
   userId: string,
   workspaceId: string,
   projectId: string,
-  input: { groupId?: string; name?: string; color?: string; sortOrder?: number },
+  input: { groupId?: string; name?: string; color?: string; balanceEnabled?: boolean; sortOrder?: number },
 ) {
   await requireWorkspaceMutationAccess(userId, workspaceId);
 
@@ -348,6 +349,7 @@ export async function updateProject(
       groupId: input.groupId,
       name: input.name,
       color: input.color,
+      balanceEnabled: input.balanceEnabled,
       sortOrder: input.sortOrder,
     },
   });
