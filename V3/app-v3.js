@@ -1389,6 +1389,10 @@ function weekKey(offset) {
   return `w${monday.getFullYear()}${String(monday.getMonth() + 1).padStart(2, '0')}${String(monday.getDate()).padStart(2, '0')}`;
 }
 
+function todayDayIndex() {
+  return (new Date().getDay() + 6) % 7;
+}
+
 function weekLabel(offset) {
   const now = new Date();
   const day = now.getDay() || 7;
@@ -2008,7 +2012,7 @@ function renderBoard() {
   renderSidebarSummary();
   renderSidebarLists();
 
-  const todayDayIdx = state.weekOffset === 0 ? (new Date().getDay() + 6) % 7 : -1;
+  const todayDayIdx = state.weekOffset === 0 ? todayDayIndex() : -1;
   let html = '<tr><th class="group-head"></th>';
   DAYS.forEach((day, dayIdx) => {
     const width = getDayColumnWidth(dayIdx);
@@ -3313,6 +3317,8 @@ function renderDayProjectOptions() {
   const groupId = document.getElementById('day-project-group-select').value;
   const daySelect = document.getElementById('day-project-day-select');
   const yearSelect = document.getElementById('day-project-year-select');
+  const projectSelect = document.getElementById('day-project-select');
+  const selectedProjectId = projectSelect.value || _dayProjectMeta.projectId || '';
   const dayIdx = Number(daySelect.value);
   _dayProjectMeta.groupId = groupId;
   _dayProjectMeta.dayIdx = dayIdx;
@@ -3341,11 +3347,20 @@ function renderDayProjectOptions() {
   const dayGroup = document.getElementById('day-project-day-select').closest('.field-group');
   dayGroup.style.display = _dayProjectMeta.mode === 'week' ? 'flex' : 'none';
   document.getElementById('day-project-year-group').style.display = _dayProjectMeta.mode === 'wins' ? 'flex' : 'none';
-  document.getElementById('day-project-select').innerHTML = available.map(project =>
+  projectSelect.innerHTML = available.map(project =>
     `<option value="${escapeHtml(project.id)}">${escapeHtml(project.label)}</option>`
   ).join('');
+  if (available.length) {
+    const nextProjectId = available.some(project => project.id === selectedProjectId)
+      ? selectedProjectId
+      : available[0].id;
+    projectSelect.value = nextProjectId;
+    _dayProjectMeta.projectId = nextProjectId;
+  } else {
+    _dayProjectMeta.projectId = '';
+  }
   document.getElementById('day-project-empty').style.display = available.length ? 'none' : 'block';
-  document.getElementById('day-project-select').style.display = available.length ? 'block' : 'none';
+  projectSelect.style.display = available.length ? 'block' : 'none';
   document.getElementById('day-project-save-btn').style.display = available.length ? 'inline-flex' : 'none';
 }
 
@@ -3355,8 +3370,8 @@ function openDayProjectModal(modeOrGroupId = null, dayIdx = null) {
   const initialGroupId = mode === 'backlog'
     ? state.groups[0]?.id || ''
     : modeOrGroupId || state.groups[0]?.id || '';
-  const initialDayIdx = Number.isInteger(dayIdx) ? dayIdx : 0;
-  _dayProjectMeta = { mode, groupId: initialGroupId, dayIdx: initialDayIdx, wk, year: state.winsYearFilter === 'all' ? String(new Date().getFullYear()) : state.winsYearFilter };
+  const initialDayIdx = Number.isInteger(dayIdx) ? dayIdx : mode === 'week' ? todayDayIndex() : 0;
+  _dayProjectMeta = { mode, groupId: initialGroupId, dayIdx: initialDayIdx, projectId: '', wk, year: state.winsYearFilter === 'all' ? String(new Date().getFullYear()) : state.winsYearFilter };
 
   document.getElementById('day-project-group-select').innerHTML = state.groups.map(group =>
     `<option value="${escapeHtml(group.id)}">${escapeHtml(group.label)}</option>`
@@ -3370,6 +3385,7 @@ function openDayProjectModal(modeOrGroupId = null, dayIdx = null) {
     `<option value="${index}">${day}</option>`
   ).join('');
   document.getElementById('day-project-day-select').value = String(initialDayIdx);
+  document.getElementById('day-project-select').innerHTML = '';
   renderDayProjectOptions();
   document.getElementById('day-project-modal').classList.add('open');
 }
@@ -4367,6 +4383,9 @@ function bindStaticUI() {
   });
   document.getElementById('day-project-group-select').addEventListener('change', renderDayProjectOptions);
   document.getElementById('day-project-day-select').addEventListener('change', renderDayProjectOptions);
+  document.getElementById('day-project-select').addEventListener('change', event => {
+    if (_dayProjectMeta) _dayProjectMeta.projectId = event.target.value;
+  });
   document.getElementById('recurring-filter-group').addEventListener('change', event => {
     state.recurringFilterGroup = event.target.value;
     state.recurringFilterProject = 'all';
