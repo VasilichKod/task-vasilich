@@ -105,6 +105,17 @@ let _hasPersistedLocalWorkspace = false;
 let _graphTouchPan = null;
 
 const LEGACY_STORAGE_KEY = 'wpv3';
+const NAVIGABLE_VIEWS = new Set([
+  'graph',
+  'tasks',
+  'wins',
+  'project',
+  'group',
+  'archive',
+  'history',
+  'profile',
+  'settings',
+]);
 
 const DEFAULT_PROFILE = {
   name: 'Степан',
@@ -124,6 +135,67 @@ const DEFAULT_SETTINGS = {
 function getWorkspaceStorageKey() {
   if (!currentUser?.id || !currentUser?.workspace?.id) return null;
   return `${LEGACY_STORAGE_KEY}:${currentUser.id}:${currentUser.workspace.id}`;
+}
+
+function getWorkspaceNavigationStorageKey() {
+  const workspaceKey = getWorkspaceStorageKey();
+  return workspaceKey ? `${workspaceKey}:navigation` : null;
+}
+
+function persistNavigationState() {
+  const storageKey = getWorkspaceNavigationStorageKey();
+  if (!storageKey) return;
+
+  try {
+    localStorage.setItem(storageKey, JSON.stringify({
+      view: state.currentView,
+      projectId: state.currentView === 'project' ? activeProjectId : null,
+      groupId: state.currentView === 'group' ? activeGroupId : null,
+      weekOffset: state.weekOffset,
+    }));
+  } catch (error) {
+    console.warn('NAVIGATION_CACHE_SAVE_FAILED', error);
+  }
+}
+
+function restoreNavigationStateForCurrentUser() {
+  const storageKey = getWorkspaceNavigationStorageKey();
+  if (!storageKey) return false;
+
+  try {
+    const raw = JSON.parse(localStorage.getItem(storageKey) || 'null');
+    if (!raw || !NAVIGABLE_VIEWS.has(raw.view)) return false;
+
+    const savedWeekOffset = Number(raw.weekOffset);
+    if (Number.isInteger(savedWeekOffset) && Math.abs(savedWeekOffset) <= 5200) {
+      state.weekOffset = savedWeekOffset;
+    }
+
+    activeProjectId = null;
+    activeGroupId = null;
+
+    if (raw.view === 'project') {
+      if (!getSub(raw.projectId)) {
+        state.currentView = 'graph';
+        return true;
+      }
+      activeProjectId = raw.projectId;
+    }
+
+    if (raw.view === 'group') {
+      if (!getGroup(raw.groupId)) {
+        state.currentView = 'graph';
+        return true;
+      }
+      activeGroupId = raw.groupId;
+    }
+
+    state.currentView = raw.view;
+    return true;
+  } catch (error) {
+    console.warn('NAVIGATION_CACHE_RESTORE_FAILED', error);
+    return false;
+  }
 }
 
 function buildLocalWorkspaceSnapshot() {
@@ -910,10 +982,18 @@ async function submitLogin(event) {
     await syncAccountFromServer();
     await syncPlanningFromServer();
     await loadAdminStats({ silent: true });
-    state.currentView = state.settings.defaultView || 'graph';
+    if (!restoreNavigationStateForCurrentUser()) {
+      state.currentView = state.settings.defaultView || 'graph';
+      activeProjectId = null;
+      activeGroupId = null;
+    }
     save();
     renderSidebarLists();
-    renderCurrentView();
+    if (state.currentView === 'project' && activeProjectId) {
+      void openProjectWorkspace(activeProjectId, { trackActivity: false });
+    } else {
+      renderCurrentView();
+    }
     showAppShell();
   } catch (error) {
     const code = error instanceof Error ? error.message : 'LOGIN_FAILED';
@@ -2010,6 +2090,7 @@ function positionGroupFlyout(row) {
 }
 
 function renderCurrentView() {
+  persistNavigationState();
   const graphView = document.getElementById('graph-view');
   const tasksView = document.getElementById('tasks-view');
   const winsView = document.getElementById('wins-view');
@@ -2608,7 +2689,7 @@ function openGroupWorkspace(groupId) {
   closeSidebar();
 }
 
-async function openProjectWorkspace(projectId) {
+async function openProjectWorkspace(projectId, options = {}) {
   const project = getSub(projectId);
   if (!project) return;
 
@@ -2621,7 +2702,9 @@ async function openProjectWorkspace(projectId) {
   renderSidebarLists();
   renderCurrentView();
   closeSidebar();
-  void markProjectActivity(projectId, 'OPEN');
+  if (options.trackActivity !== false) {
+    void markProjectActivity(projectId, 'OPEN');
+  }
 
   try {
     const board = await apiJson(`/api/projects/${encodeURIComponent(projectId)}/notes`, {
@@ -3651,6 +3734,7 @@ function deleteAchievement() {
 
 function changeWeek(delta) {
   state.weekOffset += delta;
+  persistNavigationState();
   document.getElementById('ai-section').style.display = 'none';
   renderBoard();
 }
@@ -5225,9 +5309,17 @@ async function initApp() {
     await syncAccountFromServer();
     await syncPlanningFromServer();
     await loadAdminStats({ silent: true });
-    state.currentView = state.settings.defaultView || state.currentView;
+    if (!restoreNavigationStateForCurrentUser()) {
+      state.currentView = state.settings.defaultView || 'graph';
+      activeProjectId = null;
+      activeGroupId = null;
+    }
     renderSidebarLists();
-    renderCurrentView();
+    if (state.currentView === 'project' && activeProjectId) {
+      void openProjectWorkspace(activeProjectId, { trackActivity: false });
+    } else {
+      renderCurrentView();
+    }
     showAppShell();
     hideSplash();
   } catch (error) {
