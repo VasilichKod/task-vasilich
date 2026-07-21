@@ -24,78 +24,79 @@ enum DefaultView {
 }
 
 model User {
-  id             String            @id @default(cuid())
-  email          String            @unique
-  passwordHash   String?           @map("password_hash")
-  isActive       Boolean           @default(true) @map("is_active")
-  lastLoginAt    DateTime?         @map("last_login_at")
-  lastSeenAt     DateTime?         @map("last_seen_at")
-  createdAt      DateTime          @default(now()) @map("created_at")
-  updatedAt      DateTime          @updatedAt @map("updated_at")
+  id           String    @id @default(cuid())
+  email        String    @unique
+  passwordHash String?   @map("password_hash")
+  isActive     Boolean   @default(true) @map("is_active")
+  lastLoginAt  DateTime? @map("last_login_at")
+  lastSeenAt   DateTime? @map("last_seen_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
 
-  profile        Profile?
-  ownedWorkspaces Workspace[]      @relation("WorkspaceOwner")
-  memberships    WorkspaceMember[]
-  settings       UserSetting[]
+  profile         Profile?
+  ownedWorkspaces Workspace[]       @relation("WorkspaceOwner")
+  memberships     WorkspaceMember[]
+  settings        UserSetting[]
 
   @@index([lastSeenAt])
   @@map("users")
 }
 
 model Profile {
-  id         String   @id @default(cuid())
-  userId     String   @unique @map("user_id")
-  name       String?
-  role       String?
-  city       String?
-  about      String?
-  avatarUrl  String?  @map("avatar_url")
-  createdAt  DateTime @default(now()) @map("created_at")
-  updatedAt  DateTime @updatedAt @map("updated_at")
+  id        String   @id @default(cuid())
+  userId    String   @unique @map("user_id")
+  name      String?
+  role      String?
+  city      String?
+  about     String?
+  avatarUrl String?  @map("avatar_url")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("profiles")
 }
 
 model Workspace {
-  id           String            @id @default(cuid())
-  ownerUserId  String            @map("owner_user_id")
-  name         String
-  slug         String            @unique
-  createdAt    DateTime          @default(now()) @map("created_at")
-  updatedAt    DateTime          @updatedAt @map("updated_at")
-  planningVersion Int            @default(0) @map("planning_version")
+  id              String   @id @default(cuid())
+  ownerUserId     String   @map("owner_user_id")
+  name            String
+  slug            String   @unique
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+  planningVersion Int      @default(0) @map("planning_version")
 
-  owner        User              @relation("WorkspaceOwner", fields: [ownerUserId], references: [id], onDelete: Cascade)
-  members      WorkspaceMember[]
-  groups       Group[]
-  projects     Project[]
-  weeklyTasks  WeeklyTask[]
-  backlogTasks BacklogTask[]
-  recurringTasks RecurringTask[]
-  recurringTaskStatuses RecurringTaskStatus[]
-  projectTemplates ProjectTemplate[]
-  dayProjects  DayProject[]
-  taskPageProjects TaskPageProject[]
-  achievements Achievement[]
+  owner                   User                     @relation("WorkspaceOwner", fields: [ownerUserId], references: [id], onDelete: Cascade)
+  members                 WorkspaceMember[]
+  groups                  Group[]
+  projects                Project[]
+  weeklyTasks             WeeklyTask[]
+  backlogTasks            BacklogTask[]
+  recurringTasks          RecurringTask[]
+  recurringTaskStatuses   RecurringTaskStatus[]
+  projectTemplates        ProjectTemplate[]
+  dayProjects             DayProject[]
+  taskPageProjects        TaskPageProject[]
+  achievements            Achievement[]
   achievementPageProjects AchievementPageProject[]
-  achievementYears AchievementYear[]
-  userSettings UserSetting[]
+  achievementYears        AchievementYear[]
+  projectNotes            ProjectNote[]
+  userSettings            UserSetting[]
 
   @@index([ownerUserId])
   @@map("workspaces")
 }
 
 model WorkspaceMember {
-  id          String               @id @default(cuid())
-  workspaceId String               @map("workspace_id")
-  userId      String               @map("user_id")
+  id          String              @id @default(cuid())
+  workspaceId String              @map("workspace_id")
+  userId      String              @map("user_id")
   role        WorkspaceMemberRole
-  createdAt   DateTime             @default(now()) @map("created_at")
+  createdAt   DateTime            @default(now()) @map("created_at")
 
-  workspace   Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  user        User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([workspaceId, userId])
   @@index([userId])
@@ -103,74 +104,92 @@ model WorkspaceMember {
 }
 
 model Group {
-  id          String     @id @default(cuid())
-  workspaceId String     @map("workspace_id")
-  name        String
-  color       String
-  isSystem    Boolean    @default(false) @map("is_system")
-  systemKey   String?    @map("system_key")
-  sortOrder   Int        @default(0) @map("sort_order")
-  archivedAt  DateTime?  @map("archived_at")
+  id            String    @id @default(cuid())
+  workspaceId   String    @map("workspace_id")
+  name          String
+  color         String
+  isSystem      Boolean   @default(false) @map("is_system")
+  systemKey     String?   @map("system_key")
+  sortOrder     Int       @default(0) @map("sort_order")
+  archivedAt    DateTime? @map("archived_at")
   deleteAfterAt DateTime? @map("delete_after_at")
-  createdAt   DateTime   @default(now()) @map("created_at")
-  updatedAt   DateTime   @updatedAt @map("updated_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
 
-  workspace   Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  projects    Project[]
-  dayProjects DayProject[]
-  taskPageProjects TaskPageProject[]
-  projectTemplates ProjectTemplate[]
+  workspace               Workspace                @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  projects                Project[]
+  dayProjects             DayProject[]
+  taskPageProjects        TaskPageProject[]
+  projectTemplates        ProjectTemplate[]
   achievementPageProjects AchievementPageProject[]
 
-  @@index([workspaceId, sortOrder])
   @@unique([workspaceId, systemKey])
+  @@index([workspaceId, sortOrder])
   @@map("groups")
 }
 
 model Project {
-  id          String     @id @default(cuid())
-  workspaceId String     @map("workspace_id")
-  groupId     String     @map("group_id")
-  name        String
-  color       String
-  sortOrder   Int        @default(0) @map("sort_order")
-  archivedAt  DateTime?  @map("archived_at")
+  id            String    @id @default(cuid())
+  workspaceId   String    @map("workspace_id")
+  groupId       String    @map("group_id")
+  name          String
+  color         String
+  sortOrder     Int       @default(0) @map("sort_order")
+  archivedAt    DateTime? @map("archived_at")
   deleteAfterAt DateTime? @map("delete_after_at")
-  createdAt   DateTime   @default(now()) @map("created_at")
-  updatedAt   DateTime   @updatedAt @map("updated_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
 
-  workspace   Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  group       Group      @relation(fields: [groupId], references: [id], onDelete: Restrict)
-  weeklyTasks WeeklyTask[]
-  backlogTasks BacklogTask[]
-  recurringTasks RecurringTask[]
-  projectTemplates ProjectTemplate[]
-  dayProjects DayProject[]
-  taskPageProjects TaskPageProject[]
-  achievements Achievement[]
+  workspace               Workspace                @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  group                   Group                    @relation(fields: [groupId], references: [id], onDelete: Restrict)
+  weeklyTasks             WeeklyTask[]
+  backlogTasks            BacklogTask[]
+  recurringTasks          RecurringTask[]
+  projectTemplates        ProjectTemplate[]
+  dayProjects             DayProject[]
+  taskPageProjects        TaskPageProject[]
+  achievements            Achievement[]
   achievementPageProjects AchievementPageProject[]
+  notes                   ProjectNote[]
 
   @@index([workspaceId, groupId, sortOrder])
   @@map("projects")
 }
 
+model ProjectNote {
+  id          String   @id @default(cuid())
+  workspaceId String   @map("workspace_id")
+  projectId   String   @map("project_id")
+  title       String
+  body        String   @default("")
+  sortOrder   Int      @default(0) @map("sort_order")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project   Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, projectId, sortOrder])
+  @@map("project_notes")
+}
+
 model WeeklyTask {
-  id                  String       @id @default(cuid())
-  workspaceId         String       @map("workspace_id")
-  projectId           String       @map("project_id")
-  weekStartDate       DateTime     @db.Date @map("week_start_date")
-  dayIndex            Int          @map("day_index")
+  id                  String   @id @default(cuid())
+  workspaceId         String   @map("workspace_id")
+  projectId           String   @map("project_id")
+  weekStartDate       DateTime @map("week_start_date") @db.Date
+  dayIndex            Int      @map("day_index")
   title               String
   note                String?
-  isDone              Boolean      @default(false) @map("is_done")
-  sortOrder           Int          @default(0) @map("sort_order")
-  sourceBacklogTaskId String?      @map("source_backlog_task_id")
-  createdAt           DateTime     @default(now()) @map("created_at")
-  updatedAt           DateTime     @updatedAt @map("updated_at")
+  isDone              Boolean  @default(false) @map("is_done")
+  sortOrder           Int      @default(0) @map("sort_order")
+  sourceBacklogTaskId String?  @map("source_backlog_task_id")
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
 
-  workspace           Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  project             Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  sourceBacklogTask   BacklogTask? @relation("WeeklyTaskSourceBacklog", fields: [sourceBacklogTaskId], references: [id], onDelete: SetNull)
+  workspace         Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project           Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  sourceBacklogTask BacklogTask? @relation("WeeklyTaskSourceBacklog", fields: [sourceBacklogTaskId], references: [id], onDelete: SetNull)
 
   @@index([workspaceId, projectId, weekStartDate, dayIndex])
   @@index([weekStartDate, dayIndex, sortOrder])
@@ -178,16 +197,16 @@ model WeeklyTask {
 }
 
 model BacklogTask {
-  id          String       @id @default(cuid())
-  workspaceId String       @map("workspace_id")
-  projectId   String       @map("project_id")
+  id          String    @id @default(cuid())
+  workspaceId String    @map("workspace_id")
+  projectId   String    @map("project_id")
   title       String
   note        String?
-  isDone      Boolean      @default(false) @map("is_done")
-  sortOrder   Int          @default(0) @map("sort_order")
-  archivedAt  DateTime?    @map("archived_at")
-  createdAt   DateTime     @default(now()) @map("created_at")
-  updatedAt   DateTime     @updatedAt @map("updated_at")
+  isDone      Boolean   @default(false) @map("is_done")
+  sortOrder   Int       @default(0) @map("sort_order")
+  archivedAt  DateTime? @map("archived_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
 
   workspace   Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   project     Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
@@ -198,36 +217,36 @@ model BacklogTask {
 }
 
 model RecurringTask {
-  id          String               @id @default(cuid())
-  workspaceId String               @map("workspace_id")
-  projectId   String               @map("project_id")
-  dayIndex    Int                  @map("day_index")
+  id          String    @id @default(cuid())
+  workspaceId String    @map("workspace_id")
+  projectId   String    @map("project_id")
+  dayIndex    Int       @map("day_index")
   title       String
-  sortOrder   Int                  @default(0) @map("sort_order")
-  archivedAt  DateTime?            @map("archived_at")
-  createdAt   DateTime             @default(now()) @map("created_at")
-  updatedAt   DateTime             @updatedAt @map("updated_at")
+  sortOrder   Int       @default(0) @map("sort_order")
+  archivedAt  DateTime? @map("archived_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
 
-  workspace   Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  project     Project              @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  statuses    RecurringTaskStatus[]
+  workspace Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project   Project               @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  statuses  RecurringTaskStatus[]
 
   @@index([workspaceId, projectId, dayIndex])
   @@map("recurring_tasks")
 }
 
 model RecurringTaskStatus {
-  id              String        @id @default(cuid())
-  workspaceId     String        @map("workspace_id")
-  recurringTaskId String        @map("recurring_task_id")
-  weekStartDate   DateTime      @db.Date @map("week_start_date")
-  isDone          Boolean       @default(false) @map("is_done")
+  id              String   @id @default(cuid())
+  workspaceId     String   @map("workspace_id")
+  recurringTaskId String   @map("recurring_task_id")
+  weekStartDate   DateTime @map("week_start_date") @db.Date
+  isDone          Boolean  @default(false) @map("is_done")
   note            String?
-  createdAt       DateTime      @default(now()) @map("created_at")
-  updatedAt       DateTime      @updatedAt @map("updated_at")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
 
-  workspace       Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  recurringTask   RecurringTask @relation(fields: [recurringTaskId], references: [id], onDelete: Cascade)
+  workspace     Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  recurringTask RecurringTask @relation(fields: [recurringTaskId], references: [id], onDelete: Cascade)
 
   @@unique([recurringTaskId, weekStartDate])
   @@index([workspaceId, weekStartDate])
@@ -235,18 +254,18 @@ model RecurringTaskStatus {
 }
 
 model ProjectTemplate {
-  id          String     @id @default(cuid())
-  workspaceId String     @map("workspace_id")
-  groupId     String     @map("group_id")
-  projectId   String     @map("project_id")
-  dayIndex    Int        @map("day_index")
-  isEnabled   Boolean    @default(true) @map("is_enabled")
-  createdAt   DateTime   @default(now()) @map("created_at")
-  updatedAt   DateTime   @updatedAt @map("updated_at")
+  id          String   @id @default(cuid())
+  workspaceId String   @map("workspace_id")
+  groupId     String   @map("group_id")
+  projectId   String   @map("project_id")
+  dayIndex    Int      @map("day_index")
+  isEnabled   Boolean  @default(true) @map("is_enabled")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
 
-  workspace   Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  group       Group      @relation(fields: [groupId], references: [id], onDelete: Restrict)
-  project     Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  group     Group     @relation(fields: [groupId], references: [id], onDelete: Restrict)
+  project   Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@unique([workspaceId, groupId, dayIndex, projectId])
   @@index([workspaceId, groupId, dayIndex])
@@ -254,18 +273,18 @@ model ProjectTemplate {
 }
 
 model DayProject {
-  id            String     @id @default(cuid())
-  workspaceId   String     @map("workspace_id")
-  groupId       String     @map("group_id")
-  projectId     String     @map("project_id")
-  weekStartDate DateTime   @db.Date @map("week_start_date")
-  dayIndex      Int        @map("day_index")
-  sortOrder     Int        @default(0) @map("sort_order")
-  createdAt     DateTime   @default(now()) @map("created_at")
+  id            String   @id @default(cuid())
+  workspaceId   String   @map("workspace_id")
+  groupId       String   @map("group_id")
+  projectId     String   @map("project_id")
+  weekStartDate DateTime @map("week_start_date") @db.Date
+  dayIndex      Int      @map("day_index")
+  sortOrder     Int      @default(0) @map("sort_order")
+  createdAt     DateTime @default(now()) @map("created_at")
 
-  workspace     Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  group         Group      @relation(fields: [groupId], references: [id], onDelete: Restrict)
-  project       Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  group     Group     @relation(fields: [groupId], references: [id], onDelete: Restrict)
+  project   Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@unique([workspaceId, weekStartDate, groupId, dayIndex, projectId])
   @@index([workspaceId, weekStartDate, groupId, dayIndex, sortOrder])
@@ -273,16 +292,16 @@ model DayProject {
 }
 
 model TaskPageProject {
-  id          String     @id @default(cuid())
-  workspaceId String     @map("workspace_id")
-  groupId     String     @map("group_id")
-  projectId   String     @map("project_id")
-  sortOrder   Int        @default(0) @map("sort_order")
-  createdAt   DateTime   @default(now()) @map("created_at")
+  id          String   @id @default(cuid())
+  workspaceId String   @map("workspace_id")
+  groupId     String   @map("group_id")
+  projectId   String   @map("project_id")
+  sortOrder   Int      @default(0) @map("sort_order")
+  createdAt   DateTime @default(now()) @map("created_at")
 
-  workspace   Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  group       Group      @relation(fields: [groupId], references: [id], onDelete: Restrict)
-  project     Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  group     Group     @relation(fields: [groupId], references: [id], onDelete: Restrict)
+  project   Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@unique([workspaceId, groupId, projectId])
   @@index([workspaceId, groupId, sortOrder])
@@ -290,34 +309,34 @@ model TaskPageProject {
 }
 
 model Achievement {
-  id              String     @id @default(cuid())
-  workspaceId     String     @map("workspace_id")
-  projectId       String?    @map("project_id")
-  projectNameSnapshot String @map("project_name_snapshot")
-  groupNameSnapshot   String? @map("group_name_snapshot")
-  achievementYear Int        @map("achievement_year")
-  achievementDate DateTime?  @db.Date @map("achievement_date")
-  title           String
-  sortOrder       Int        @default(0) @map("sort_order")
-  createdAt       DateTime   @default(now()) @map("created_at")
-  updatedAt       DateTime   @updatedAt @map("updated_at")
+  id                  String    @id @default(cuid())
+  workspaceId         String    @map("workspace_id")
+  projectId           String?   @map("project_id")
+  projectNameSnapshot String    @map("project_name_snapshot")
+  groupNameSnapshot   String?   @map("group_name_snapshot")
+  achievementYear     Int       @map("achievement_year")
+  achievementDate     DateTime? @map("achievement_date") @db.Date
+  title               String
+  sortOrder           Int       @default(0) @map("sort_order")
+  createdAt           DateTime  @default(now()) @map("created_at")
+  updatedAt           DateTime  @updatedAt @map("updated_at")
 
-  workspace       Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  project         Project?   @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project   Project?  @relation(fields: [projectId], references: [id], onDelete: SetNull)
 
   @@index([workspaceId, achievementYear, projectId, achievementDate])
   @@map("achievements")
 }
 
 model AchievementYear {
-  id              String    @id @default(cuid())
-  workspaceId     String    @map("workspace_id")
-  achievementYear Int       @map("achievement_year")
-  sortOrder       Int       @default(0) @map("sort_order")
-  createdAt       DateTime  @default(now()) @map("created_at")
-  updatedAt       DateTime  @updatedAt @map("updated_at")
+  id              String   @id @default(cuid())
+  workspaceId     String   @map("workspace_id")
+  achievementYear Int      @map("achievement_year")
+  sortOrder       Int      @default(0) @map("sort_order")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
 
-  workspace       Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@unique([workspaceId, achievementYear])
   @@index([workspaceId, sortOrder, achievementYear])
@@ -325,19 +344,19 @@ model AchievementYear {
 }
 
 model AchievementPageProject {
-  id              String     @id @default(cuid())
-  workspaceId     String     @map("workspace_id")
-  groupId         String?    @map("group_id")
-  projectId       String?    @map("project_id")
-  groupNameSnapshot String   @map("group_name_snapshot")
-  projectNameSnapshot String @map("project_name_snapshot")
-  achievementYear Int        @map("achievement_year")
-  sortOrder       Int        @default(0) @map("sort_order")
-  createdAt       DateTime   @default(now()) @map("created_at")
+  id                  String   @id @default(cuid())
+  workspaceId         String   @map("workspace_id")
+  groupId             String?  @map("group_id")
+  projectId           String?  @map("project_id")
+  groupNameSnapshot   String   @map("group_name_snapshot")
+  projectNameSnapshot String   @map("project_name_snapshot")
+  achievementYear     Int      @map("achievement_year")
+  sortOrder           Int      @default(0) @map("sort_order")
+  createdAt           DateTime @default(now()) @map("created_at")
 
-  workspace       Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  group           Group?     @relation(fields: [groupId], references: [id], onDelete: SetNull)
-  project         Project?   @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  group     Group?    @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  project   Project?  @relation(fields: [projectId], references: [id], onDelete: SetNull)
 
   @@unique([workspaceId, achievementYear, groupId, projectId])
   @@index([workspaceId, achievementYear, groupId, sortOrder])
@@ -345,18 +364,18 @@ model AchievementPageProject {
 }
 
 model UserSetting {
-  id                           String      @id @default(cuid())
-  userId                       String      @map("user_id")
-  workspaceId                  String      @map("workspace_id")
-  defaultView                  DefaultView @default(GRAPH) @map("default_view")
-  sidebarCollapsedOnStart      Boolean     @default(false) @map("sidebar_collapsed_on_start")
-  openCurrentYearInAchievements Boolean    @default(true) @map("open_current_year_in_achievements")
-  workspaceNameOverride        String?     @map("workspace_name_override")
-  createdAt                    DateTime    @default(now()) @map("created_at")
-  updatedAt                    DateTime    @updatedAt @map("updated_at")
+  id                            String      @id @default(cuid())
+  userId                        String      @map("user_id")
+  workspaceId                   String      @map("workspace_id")
+  defaultView                   DefaultView @default(GRAPH) @map("default_view")
+  sidebarCollapsedOnStart       Boolean     @default(false) @map("sidebar_collapsed_on_start")
+  openCurrentYearInAchievements Boolean     @default(true) @map("open_current_year_in_achievements")
+  workspaceNameOverride         String?     @map("workspace_name_override")
+  createdAt                     DateTime    @default(now()) @map("created_at")
+  updatedAt                     DateTime    @updatedAt @map("updated_at")
 
-  user                         User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  workspace                    Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@unique([userId, workspaceId])
   @@map("user_settings")

@@ -209,6 +209,7 @@
 
       <section class="tasks-view" id="tasks-view" style="display:none"></section>
       <section class="wins-view" id="wins-view" style="display:none"></section>
+      <section class="project-workspace-view" id="project-view" style="display:none"></section>
       <section class="empty-view" id="history-view" style="display:none"></section>
       <section class="profile-view" id="profile-view" style="display:none"></section>
       <section class="settings-view" id="settings-view" style="display:none"></section>
@@ -274,6 +275,31 @@
         <button id="task-send-btn" type="button" onclick="sendTaskToGraph()" style="display:none">В график</button>
         <button id="task-next-week-btn" type="button" onclick="requestMoveTaskToNextWeek()" style="display:none">Перенос</button>
         <button class="primary" id="task-save-btn" type="button" onclick="saveTask()">Сохранить</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Project note modal -->
+  <div class="modal-bg" id="project-note-modal" onclick="handleModalBackdrop(event, 'project-note')">
+    <div class="modal project-note-modal">
+      <div class="modal-header">
+        <div class="modal-title" id="project-note-modal-title">Новая заметка</div>
+        <button class="modal-close" type="button" onclick="closeProjectNoteModal()" aria-label="Закрыть">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <label class="field-group">
+        <span class="form-label">Название</span>
+        <input id="project-note-title" maxlength="240" placeholder="Например: Доступы и ссылки" />
+      </label>
+      <label class="field-group">
+        <span class="form-label">Содержание</span>
+        <textarea id="project-note-body" maxlength="50000" placeholder="Вся полезная информация по проекту..."></textarea>
+      </label>
+      <div class="modal-note project-note-error" id="project-note-error" style="display:none"></div>
+      <div class="modal-actions modal-actions-right">
+        <button id="project-note-delete-btn" type="button" onclick="deleteProjectNote()" style="display:none">Удалить</button>
+        <button class="primary" id="project-note-save-btn" type="button" onclick="saveProjectNote()">Сохранить</button>
       </div>
     </div>
   </div>

@@ -12,6 +12,12 @@ import {
 import { handleSaveAchievementsStateRequest } from '../api/achievements/index.js';
 import { handleSavePlanningStateRequest } from '../api/planning/index.js';
 import {
+  handleCreateProjectNoteRequest,
+  handleDeleteProjectNoteRequest,
+  handleGetProjectNotesRequest,
+  handleUpdateProjectNoteRequest,
+} from '../api/project-notes/index.js';
+import {
   handleArchiveGroupRequest,
   handleArchiveProjectRequest,
   handleCreateGroupRequest,
@@ -191,6 +197,24 @@ async function route(request: Request) {
 
   if (request.method === 'PATCH' && url.pathname === '/api/achievements-state') {
     return withCors(request, await handleSaveAchievementsStateRequest(request));
+  }
+
+  const projectNotesMatch = url.pathname.match(/^\/api\/projects\/([^/]+)\/notes$/);
+  if (request.method === 'GET' && projectNotesMatch) {
+    return withCors(request, await handleGetProjectNotesRequest(request, projectNotesMatch[1]));
+  }
+
+  if (request.method === 'POST' && projectNotesMatch) {
+    return withCors(request, await handleCreateProjectNoteRequest(request, projectNotesMatch[1]));
+  }
+
+  const projectNoteMatch = url.pathname.match(/^\/api\/project-notes\/([^/]+)$/);
+  if (request.method === 'PATCH' && projectNoteMatch) {
+    return withCors(request, await handleUpdateProjectNoteRequest(request, projectNoteMatch[1]));
+  }
+
+  if (request.method === 'DELETE' && projectNoteMatch) {
+    return withCors(request, await handleDeleteProjectNoteRequest(request, projectNoteMatch[1]));
   }
 
   if (request.method === 'GET' && url.pathname === '/api/catalog') {

@@ -82,6 +82,11 @@ let adminStatsError = '';
 let settingsSection = 'service';
 let _confirmMeta = null;
 let _toastTimer = null;
+let activeProjectId = null;
+let projectNotesByProject = {};
+let projectNotesLoadingProjectId = null;
+let projectNotesError = '';
+let manageProjectNoteId = null;
 let _sidebarDragMeta = null;
 let _planningSyncTimer = null;
 let _lastPlanningSyncSignature = '';
@@ -979,6 +984,11 @@ async function logoutUser() {
 
   currentUser = null;
   _hasPersistedLocalWorkspace = false;
+  activeProjectId = null;
+  projectNotesByProject = {};
+  projectNotesLoadingProjectId = null;
+  projectNotesError = '';
+  manageProjectNoteId = null;
   showAuthShell();
 }
 
@@ -1657,6 +1667,11 @@ function seedSample() {
 
 function load() {
   _hasPersistedLocalWorkspace = false;
+  activeProjectId = null;
+  projectNotesByProject = {};
+  projectNotesLoadingProjectId = null;
+  projectNotesError = '';
+  manageProjectNoteId = null;
 
   state.groups = normalizeGroups(DEFAULT_GROUPS);
   state.subs = normalizeSubs([], state.groups);
@@ -1853,13 +1868,13 @@ function renderSidebarLists() {
     <button class="sidebar-inline-add" type="button" onclick="openManage()">+ Добавить проект</button>
     ${state.subs.map(project => `
     <div
-      class="sidebar-item-row"
+      class="sidebar-item-row${state.currentView === 'project' && activeProjectId === project.id ? ' active' : ''}"
       draggable="true"
       ondragstart="dragSidebarItem(event, 'project', decodeInlineToken('${inlineToken(project.id)}'))"
       ondragover="allowSidebarItemDrop(event)"
       ondrop="dropSidebarItem(event, 'project', decodeInlineToken('${inlineToken(project.id)}'))"
     >
-      <button class="sidebar-item-main" type="button" onclick="openManage(decodeInlineToken('${inlineToken(project.id)}'))">
+      <button class="sidebar-item-main" type="button" onclick="openProjectWorkspace(decodeInlineToken('${inlineToken(project.id)}'))">
         <span class="sidebar-project-dot" style="background:${project.color}"></span>
         <span>${escapeHtml(project.label)}</span>
       </button>
@@ -1871,6 +1886,7 @@ function renderCurrentView() {
   const graphView = document.getElementById('graph-view');
   const tasksView = document.getElementById('tasks-view');
   const winsView = document.getElementById('wins-view');
+  const projectView = document.getElementById('project-view');
   const historyView = document.getElementById('history-view');
   const profileView = document.getElementById('profile-view');
   const settingsView = document.getElementById('settings-view');
@@ -1884,6 +1900,7 @@ function renderCurrentView() {
   graphView.style.display = state.currentView === 'graph' ? 'block' : 'none';
   tasksView.style.display = state.currentView === 'tasks' ? 'block' : 'none';
   winsView.style.display = state.currentView === 'wins' ? 'block' : 'none';
+  projectView.style.display = state.currentView === 'project' ? 'block' : 'none';
   historyView.style.display = state.currentView === 'history' ? 'block' : 'none';
   profileView.style.display = state.currentView === 'profile' ? 'block' : 'none';
   settingsView.style.display = state.currentView === 'settings' ? 'block' : 'none';
@@ -1910,6 +1927,28 @@ function renderCurrentView() {
   pageTitle.style.display = 'block';
   statsBar.style.display = 'none';
   pageTitle.classList.remove('page-title-with-tabs');
+  pageTitle.classList.remove('project-page-title');
+
+  if (state.currentView === 'project') {
+    const project = getSub(activeProjectId);
+    if (!project) {
+      state.currentView = 'graph';
+      activeProjectId = null;
+      renderCurrentView();
+      return;
+    }
+    pageTitle.classList.add('project-page-title');
+    pageTitle.innerHTML = `<span class="project-page-title-dot" style="background:${project.color}"></span><span>${escapeHtml(project.label)}</span>`;
+    createBtn.style.display = 'inline-flex';
+    createBtn.textContent = '+ заметка';
+    createBtn.onclick = () => openProjectNoteModal();
+    addProjectBtn.style.display = 'inline-flex';
+    addProjectBtn.textContent = 'настройки';
+    addProjectBtn.onclick = () => openManage(activeProjectId);
+    carryBtn.style.display = 'none';
+    renderProjectWorkspaceView();
+    return;
+  }
 
   if (state.currentView === 'tasks') {
     pageTitle.textContent = 'Задачи';
@@ -2136,6 +2175,278 @@ function renderTasksView() {
   if (_inlineBacklogMeta) {
     setTimeout(() => document.getElementById('inline-backlog-input')?.focus(), 20);
   }
+}
+
+function normalizeProjectNote(note) {
+  return {
+    id: String(note?.id || ''),
+    projectId: String(note?.projectId || ''),
+    title: String(note?.title || ''),
+    body: String(note?.body || ''),
+    sortOrder: Number(note?.sortOrder || 0),
+    createdAt: note?.createdAt || '',
+    updatedAt: note?.updatedAt || '',
+  };
+}
+
+function formatProjectNoteDate(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleDateString('ru-RU', {
+    day: 'numeric',
+    month: 'short',
+    year: date.getFullYear() === new Date().getFullYear() ? undefined : 'numeric',
+  });
+}
+
+function getProjectWorkspaceStats(projectId) {
+  const weeklyTasks = Object.values(state.data[weekKey(0)]?.[projectId] || {}).flat();
+  const backlogTasks = state.backlog[projectId] || [];
+  return {
+    openWeeklyTasks: weeklyTasks.filter(task => !task.done).length,
+    backlogTasks: backlogTasks.filter(task => !task.done).length,
+  };
+}
+
+function renderProjectNoteCards(project, notes) {
+  if (projectNotesError) {
+    return `
+      <div class="project-notes-state project-notes-error-state">
+        <div class="project-notes-state-title">Не удалось загрузить заметки</div>
+        <div class="project-notes-state-copy">${escapeHtml(projectNotesError)}</div>
+        <button type="button" onclick="retryProjectNotes()">Повторить</button>
+      </div>
+    `;
+  }
+
+  if (projectNotesLoadingProjectId === project.id && !notes.length) {
+    return `<div class="project-note-grid project-note-skeleton-grid" aria-label="Загрузка заметок">
+      ${[0, 1, 2, 3].map(index => `
+        <div class="project-note-skeleton" style="--note-delay:${index * 55}ms">
+          <span></span><span></span><span></span>
+        </div>
+      `).join('')}
+    </div>`;
+  }
+
+  if (!notes.length) {
+    return `
+      <button class="project-notes-empty" type="button" onclick="openProjectNoteModal()">
+        <span class="project-notes-empty-mark" aria-hidden="true">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
+        </span>
+        <span class="project-notes-state-title">Создать первую заметку</span>
+        <span class="project-notes-state-copy">Собери здесь ссылки, доступы, решения и важный контекст по проекту.</span>
+      </button>
+    `;
+  }
+
+  return `<div class="project-note-grid">
+    ${notes.map((note, index) => {
+      const preview = note.body.trim().replace(/\s+/g, ' ').slice(0, 280);
+      return `
+        <button
+          class="project-note-card"
+          type="button"
+          style="--project-note-color:${project.color};--note-delay:${Math.min(index, 8) * 45}ms"
+          onclick="openProjectNoteModal(decodeInlineToken('${inlineToken(note.id)}'))"
+        >
+          <span class="project-note-card-title">${escapeHtml(note.title)}</span>
+          <span class="project-note-card-preview${preview ? '' : ' empty'}">${preview ? escapeHtml(preview) : 'Пока без текста'}</span>
+          <span class="project-note-card-footer">
+            <span>${escapeHtml(formatProjectNoteDate(note.updatedAt || note.createdAt))}</span>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          </span>
+        </button>
+      `;
+    }).join('')}
+    <button class="project-note-add-card" type="button" onclick="openProjectNoteModal()">
+      <span aria-hidden="true">+</span>
+      <span>Новая заметка</span>
+    </button>
+  </div>`;
+}
+
+function renderProjectWorkspaceView() {
+  const root = document.getElementById('project-view');
+  const project = getSub(activeProjectId);
+  if (!root || !project) return;
+  const group = getGroup(project.group);
+  const notes = projectNotesByProject[project.id] || [];
+  const stats = getProjectWorkspaceStats(project.id);
+
+  root.innerHTML = `
+    <div class="project-workspace-shell">
+      <header class="project-workspace-header" style="--project-workspace-color:${project.color}">
+        <div class="project-workspace-identity">
+          <div class="project-workspace-kicker">${escapeHtml(group?.label || 'Без группы')} · рабочее пространство</div>
+          <h1>${escapeHtml(project.label)}</h1>
+          <p>Заметки, решения и важная информация, которая должна жить вместе с проектом.</p>
+        </div>
+        <div class="project-workspace-metrics" aria-label="Сводка проекта">
+          <div><strong>${notes.length}</strong><span>заметок</span></div>
+          <div><strong>${stats.openWeeklyTasks}</strong><span>задач в неделе</span></div>
+          <div><strong>${stats.backlogTasks}</strong><span>в списке</span></div>
+        </div>
+      </header>
+
+      <section class="project-notes-section">
+        <div class="project-notes-toolbar">
+          <div>
+            <div class="project-notes-title">Заметки</div>
+            <div class="project-notes-subtitle">Информация без статуса выполнения</div>
+          </div>
+          <button type="button" onclick="openProjectNoteModal()">+ заметка</button>
+        </div>
+        ${renderProjectNoteCards(project, notes)}
+      </section>
+    </div>
+  `;
+}
+
+async function openProjectWorkspace(projectId) {
+  const project = getSub(projectId);
+  if (!project) return;
+
+  activeProjectId = projectId;
+  state.currentView = 'project';
+  state.ui.projectsOpen = true;
+  projectNotesError = '';
+  projectNotesLoadingProjectId = projectId;
+  renderSidebarLists();
+  renderCurrentView();
+  closeSidebar();
+
+  try {
+    const notes = await apiJson(`/api/projects/${encodeURIComponent(projectId)}/notes`, {
+      method: 'GET',
+      headers: {},
+    });
+    projectNotesByProject[projectId] = (notes || []).map(normalizeProjectNote);
+  } catch (error) {
+    console.error(error);
+    if (activeProjectId === projectId) {
+      projectNotesError = 'Проверь соединение и попробуй ещё раз.';
+    }
+  } finally {
+    if (projectNotesLoadingProjectId === projectId) {
+      projectNotesLoadingProjectId = null;
+    }
+    if (state.currentView === 'project' && activeProjectId === projectId) {
+      renderSidebarLists();
+      renderCurrentView();
+    }
+  }
+}
+
+function retryProjectNotes() {
+  if (activeProjectId) openProjectWorkspace(activeProjectId);
+}
+
+function setProjectNoteError(message = '') {
+  const node = document.getElementById('project-note-error');
+  node.textContent = message;
+  node.style.display = message ? 'block' : 'none';
+}
+
+function openProjectNoteModal(noteId = null) {
+  if (!activeProjectId) return;
+  const note = noteId
+    ? (projectNotesByProject[activeProjectId] || []).find(item => item.id === noteId)
+    : null;
+  if (noteId && !note) return;
+
+  manageProjectNoteId = note?.id || null;
+  document.getElementById('project-note-modal-title').textContent = note ? 'Редактировать заметку' : 'Новая заметка';
+  document.getElementById('project-note-title').value = note?.title || '';
+  document.getElementById('project-note-body').value = note?.body || '';
+  document.getElementById('project-note-delete-btn').style.display = note ? 'inline-flex' : 'none';
+  document.getElementById('project-note-save-btn').textContent = note ? 'Сохранить' : 'Создать';
+  setProjectNoteError('');
+  document.getElementById('project-note-modal').classList.add('open');
+  setTimeout(() => document.getElementById('project-note-title')?.focus(), 20);
+}
+
+function closeProjectNoteModal() {
+  document.getElementById('project-note-modal').classList.remove('open');
+  manageProjectNoteId = null;
+  setProjectNoteError('');
+}
+
+async function saveProjectNote() {
+  if (!activeProjectId) return;
+  const projectId = activeProjectId;
+  const noteId = manageProjectNoteId;
+  const title = document.getElementById('project-note-title').value.trim();
+  const body = document.getElementById('project-note-body').value.trim();
+  if (!title) {
+    setProjectNoteError('Добавь название заметки.');
+    return;
+  }
+
+  const saveButton = document.getElementById('project-note-save-btn');
+  saveButton.disabled = true;
+  saveButton.textContent = 'Сохраняем...';
+  setProjectNoteError('');
+
+  try {
+    const saved = await apiJson(
+      noteId ? `/api/project-notes/${encodeURIComponent(noteId)}` : `/api/projects/${encodeURIComponent(projectId)}/notes`,
+      {
+        method: noteId ? 'PATCH' : 'POST',
+        body: JSON.stringify({ title, body }),
+      },
+    );
+    const normalized = normalizeProjectNote(saved);
+    const notes = projectNotesByProject[projectId] || [];
+    projectNotesByProject[projectId] = noteId
+      ? notes.map(note => note.id === noteId ? normalized : note)
+      : [...notes, normalized];
+    closeProjectNoteModal();
+    if (state.currentView === 'project' && activeProjectId === projectId) {
+      renderProjectWorkspaceView();
+    }
+    showToast(noteId ? 'Заметка сохранена' : 'Заметка создана');
+  } catch (error) {
+    console.error(error);
+    setProjectNoteError('Не удалось сохранить заметку. Попробуй ещё раз.');
+  } finally {
+    saveButton.disabled = false;
+    if (document.getElementById('project-note-modal').classList.contains('open')) {
+      saveButton.textContent = noteId ? 'Сохранить' : 'Создать';
+    }
+  }
+}
+
+function deleteProjectNote() {
+  if (!activeProjectId || !manageProjectNoteId) return;
+  const projectId = activeProjectId;
+  const noteId = manageProjectNoteId;
+  const note = (projectNotesByProject[projectId] || []).find(item => item.id === noteId);
+
+  openConfirmModal({
+    title: 'Удалить заметку',
+    message: `Удалить заметку${note?.title ? ` «${note.title}»` : ''}? Это действие нельзя отменить.`,
+    confirmText: 'Удалить',
+    danger: true,
+    onConfirm: async () => {
+      try {
+        await apiJson(`/api/project-notes/${encodeURIComponent(noteId)}`, {
+          method: 'DELETE',
+          headers: {},
+        });
+        projectNotesByProject[projectId] = (projectNotesByProject[projectId] || []).filter(item => item.id !== noteId);
+        closeProjectNoteModal();
+        if (state.currentView === 'project' && activeProjectId === projectId) {
+          renderProjectWorkspaceView();
+        }
+        showToast('Заметка удалена');
+      } catch (error) {
+        console.error(error);
+        setProjectNoteError('Не удалось удалить заметку.');
+      }
+    },
+  });
 }
 
 function getAchievementYears() {
@@ -3877,7 +4188,8 @@ async function saveProject() {
 
 async function deleteProject() {
   if (!manageProjectId) return;
-  const project = getSub(manageProjectId);
+  const projectId = manageProjectId;
+  const project = getSub(projectId);
   openConfirmModal({
     title: 'Удалить проект',
     message: `Удалить проект${project?.label ? ` «${project.label}»` : ''}? Он уйдёт в архив на 30 дней.`,
@@ -3885,12 +4197,17 @@ async function deleteProject() {
     danger: true,
     onConfirm: async () => {
       try {
-        await apiJson(`/api/catalog/projects/${manageProjectId}`, {
+        await apiJson(`/api/catalog/projects/${projectId}`, {
           method: 'DELETE',
           headers: {},
         });
 
-        removeProjectFromLocalState(manageProjectId);
+        removeProjectFromLocalState(projectId);
+        delete projectNotesByProject[projectId];
+        if (activeProjectId === projectId) {
+          activeProjectId = null;
+          state.currentView = 'graph';
+        }
         await syncCatalogFromServer();
         closeManage();
         renderCurrentView();
@@ -4305,6 +4622,7 @@ function dropProjectOnCard(event, targetGroupId, targetDayIdx, targetSubId) {
 function handleModalBackdrop(event, type) {
   if (event.target !== event.currentTarget) return;
   if (type === 'task') closeTaskModal();
+  if (type === 'project-note') closeProjectNoteModal();
   if (type === 'create-task') closeCreateTaskModal();
   if (type === 'day-project') closeDayProjectModal();
   if (type === 'project-template') closeProjectTemplateManage();
