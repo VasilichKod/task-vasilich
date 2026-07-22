@@ -952,7 +952,7 @@ body {
   display: inline-flex;
   min-height: 34px;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   border: 0;
   border-radius: calc(var(--radius) - 2px);
   background: transparent;
@@ -963,7 +963,14 @@ body {
   text-align: left;
 }
 .graph-tools-popover button:hover { background: var(--bg3); color: var(--text); }
-.graph-tools-popover button svg { opacity: 0.72; }
+.graph-tools-menu-icon {
+  display: inline-grid;
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  place-items: center;
+}
+.graph-tools-popover button svg { display: block; width: 14px; height: 14px; opacity: 0.72; }
 
 /* ─── STATS BAR ─────────────────────────────────────────── */
 .stats-bar {
