@@ -2198,9 +2198,16 @@ function renderCurrentView() {
   settingsView.style.display = state.currentView === 'settings' ? 'block' : 'none';
   document.getElementById('ai-section').style.display = 'none';
 
+  // Заголовок проекта/группы использует display: inline-flex !important.
+  // Снимаем его до раннего выхода для графика, иначе он остаётся видимым
+  // рядом с навигацией по неделе после перехода из страницы группы.
+  pageTitle.classList.remove('page-title-with-tabs');
+  pageTitle.classList.remove('project-page-title');
+
   if (state.currentView === 'graph') {
     weekNav.style.display = 'flex';
     pageTitle.style.display = 'none';
+    pageTitle.textContent = '';
     statsBar.style.display = 'flex';
     createBtn.style.display = 'inline-flex';
     createBtn.textContent = '+ задача';
@@ -2218,8 +2225,6 @@ function renderCurrentView() {
   weekNav.style.display = 'none';
   pageTitle.style.display = 'block';
   statsBar.style.display = 'none';
-  pageTitle.classList.remove('page-title-with-tabs');
-  pageTitle.classList.remove('project-page-title');
 
   if (state.currentView === 'group') {
     const group = getGroup(activeGroupId);
