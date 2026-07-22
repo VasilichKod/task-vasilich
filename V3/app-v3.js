@@ -2185,6 +2185,7 @@ function renderCurrentView() {
   const createBtn = document.getElementById('top-create-task-btn');
   const addProjectBtn = document.getElementById('top-add-project-btn');
   const carryBtn = document.getElementById('top-carry-btn');
+  const graphTools = document.getElementById('graph-tools');
 
   graphView.style.display = state.currentView === 'graph' ? 'block' : 'none';
   tasksView.style.display = state.currentView === 'tasks' ? 'block' : 'none';
@@ -2209,19 +2210,20 @@ function renderCurrentView() {
     pageTitle.style.display = 'none';
     pageTitle.textContent = '';
     statsBar.style.display = 'flex';
-    createBtn.style.display = 'inline-flex';
-    createBtn.textContent = '+ задача';
-    createBtn.onclick = () => openCreateTaskModal('week');
+    createBtn.style.display = 'none';
     addProjectBtn.style.display = 'inline-flex';
     addProjectBtn.textContent = '+ проект';
     addProjectBtn.onclick = () => openDayProjectModal();
     carryBtn.style.display = 'inline-flex';
     carryBtn.textContent = 'перенос';
     carryBtn.onclick = () => carryOverUnfinished();
+    graphTools.style.display = 'inline-flex';
     renderBoard();
     return;
   }
 
+  closeGraphToolsMenu();
+  graphTools.style.display = 'none';
   weekNav.style.display = 'none';
   pageTitle.style.display = 'block';
   statsBar.style.display = 'none';
@@ -3001,6 +3003,35 @@ function switchView(view) {
   renderSidebarLists();
   renderCurrentView();
   closeSidebar();
+}
+
+function closeGraphToolsMenu() {
+  const tools = document.getElementById('graph-tools');
+  const trigger = document.getElementById('top-graph-tools-btn');
+  if (!tools || !trigger) return;
+  tools.classList.remove('open');
+  trigger.setAttribute('aria-expanded', 'false');
+}
+
+function toggleGraphToolsMenu(event) {
+  event?.preventDefault();
+  event?.stopPropagation();
+  const tools = document.getElementById('graph-tools');
+  const trigger = document.getElementById('top-graph-tools-btn');
+  if (!tools || !trigger) return;
+  const willOpen = !tools.classList.contains('open');
+  tools.classList.toggle('open', willOpen);
+  trigger.setAttribute('aria-expanded', String(willOpen));
+}
+
+function openGraphTemplates() {
+  closeGraphToolsMenu();
+  openProjectTemplateManage();
+}
+
+function openGraphRecurring() {
+  closeGraphToolsMenu();
+  openRecurringManage();
 }
 
 function renderBoard() {
@@ -5988,6 +6019,13 @@ function bindStaticUI() {
     mainContent.addEventListener('touchend', handleGraphTouchEnd, { passive: true });
     mainContent.addEventListener('touchcancel', handleGraphTouchEnd, { passive: true });
   }
+
+  document.addEventListener('click', event => {
+    if (!event.target.closest('#graph-tools')) closeGraphToolsMenu();
+  });
+  document.addEventListener('keydown', event => {
+    if (event.key === 'Escape') closeGraphToolsMenu();
+  });
 
   document.getElementById('task-day-select').innerHTML = DAYS.map((day, index) => `<option value="${index}">${day}</option>`).join('');
   document.getElementById('create-task-group-select').addEventListener('change', renderCreateTaskOptions);
