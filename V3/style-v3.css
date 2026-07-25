@@ -493,6 +493,11 @@ body {
   transition: color var(--t-fast), background var(--t-fast), border-color var(--t-fast);
 }
 .sidebar-entity-toggle {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 9px;
   overflow: hidden;
   padding: 0 10px;
   font: 500 15px/1 var(--font-sans);

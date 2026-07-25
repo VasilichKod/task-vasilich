@@ -131,12 +131,18 @@
       <div class="sidebar-section">
         <div class="sidebar-label">Управление</div>
         <div class="sidebar-entity-heading">
-          <button class="sidebar-entity-toggle" id="sidebar-projects-toggle" type="button" onclick="toggleSidebarSection('projects')" aria-expanded="false">Проекты</button>
+          <button class="sidebar-entity-toggle" id="sidebar-projects-toggle" type="button" onclick="toggleSidebarSection('projects')" aria-expanded="false">
+            <span class="sidebar-link-icon" aria-hidden="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg></span>
+            <span class="sidebar-link-text">Проекты</span>
+          </button>
           <button class="sidebar-entity-add" type="button" onclick="openManage()" aria-label="Добавить проект" title="Добавить проект">+</button>
         </div>
         <div class="sidebar-projects sidebar-hide-on-collapse" id="sidebar-projects"></div>
         <div class="sidebar-entity-heading">
-          <button class="sidebar-entity-toggle" id="sidebar-groups-toggle" type="button" onclick="toggleSidebarSection('groups')" aria-expanded="false">Группы</button>
+          <button class="sidebar-entity-toggle" id="sidebar-groups-toggle" type="button" onclick="toggleSidebarSection('groups')" aria-expanded="false">
+            <span class="sidebar-link-icon" aria-hidden="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg></span>
+            <span class="sidebar-link-text">Группы</span>
+          </button>
           <button class="sidebar-entity-add" type="button" onclick="openGroupManage()" aria-label="Добавить группу" title="Добавить группу">+</button>
         </div>
         <div class="sidebar-groups sidebar-hide-on-collapse" id="sidebar-groups"></div>
