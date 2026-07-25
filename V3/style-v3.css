@@ -476,6 +476,46 @@ body {
 .sidebar-section-arrow { color: rgba(247, 247, 243, 0.82); transition: transform var(--t-mid); }
 .sidebar-section-toggle.open .sidebar-section-arrow { transform: rotate(90deg); }
 
+.sidebar-entity-heading {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 32px;
+  align-items: center;
+  min-height: 38px;
+}
+.sidebar-entity-toggle,
+.sidebar-entity-add {
+  min-height: 32px;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--sidebar-text);
+  cursor: pointer;
+  transition: color var(--t-fast), background var(--t-fast), border-color var(--t-fast);
+}
+.sidebar-entity-toggle {
+  overflow: hidden;
+  padding: 0 10px;
+  font: 500 15px/1 var(--font-sans);
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sidebar-entity-add {
+  display: grid;
+  width: 30px;
+  padding: 0;
+  place-items: center;
+  color: rgba(247, 247, 243, 0.7);
+  font: 400 24px/1 var(--font-sans);
+}
+.sidebar-entity-toggle:hover,
+.sidebar-entity-toggle.open,
+.sidebar-entity-add:hover {
+  border-color: rgba(255, 255, 255, 0.1);
+  background: var(--sidebar-hover);
+  color: #fff;
+}
+
 .sidebar-groups,
 .sidebar-projects { display: none; flex-direction: column; gap: 2px; padding-left: 0; }
 .sidebar-groups.open,
@@ -568,7 +608,6 @@ body {
   opacity: 1;
   box-shadow: 0 20px 56px rgba(20, 20, 18, 0.24);
 }
-.sidebar-group-row:hover .sidebar-group-flyout,
 .sidebar-group-row.flyout-open .sidebar-group-flyout { display: flex; }
 .sidebar-group-flyout-header {
   display: flex;
@@ -712,6 +751,7 @@ body {
 #app.sidebar-collapsed .sidebar-label,
 #app.sidebar-collapsed .sidebar-link-text,
 #app.sidebar-collapsed .sidebar-section-arrow,
+#app.sidebar-collapsed .sidebar-entity-heading,
 #app.sidebar-collapsed .sidebar-summary,
 #app.sidebar-collapsed .sidebar-groups,
 #app.sidebar-collapsed .sidebar-projects { display: none !important; }
@@ -3678,7 +3718,6 @@ button[id$="-delete-btn"]:hover {
 }
 
 @media (max-width: 768px) {
-  .sidebar-group-row:hover .sidebar-group-flyout { display: none; }
   .sidebar-group-row.flyout-open .sidebar-group-flyout {
     position: static;
     display: flex;

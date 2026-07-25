@@ -89,6 +89,7 @@ let _toastTimer = null;
 let activeProjectId = null;
 let activeGroupId = null;
 let sidebarGroupFlyoutId = null;
+let _sidebarGroupFlyoutCloseTimer = null;
 let groupProjectQuery = '';
 let projectNotesByProject = {};
 let projectNoteSectionsByProject = {};
@@ -1148,6 +1149,7 @@ async function logoutUser() {
   _hasPersistedLocalWorkspace = false;
   activeProjectId = null;
   activeGroupId = null;
+  cancelGroupFlyoutClose();
   sidebarGroupFlyoutId = null;
   groupProjectQuery = '';
   projectNotesByProject = {};
@@ -1846,6 +1848,7 @@ function load() {
   _hasPersistedLocalWorkspace = false;
   activeProjectId = null;
   activeGroupId = null;
+  cancelGroupFlyoutClose();
   sidebarGroupFlyoutId = null;
   groupProjectQuery = '';
   projectNotesByProject = {};
@@ -2065,11 +2068,11 @@ function renderSidebarLists() {
     button.classList.toggle('active', button.dataset.view === state.currentView);
   });
   const groupsWrap = document.getElementById('sidebar-groups');
-  const groupToggle = document.querySelector('.sidebar-action[onclick="toggleSidebarSection(\'groups\')"]');
+  const groupToggle = document.getElementById('sidebar-groups-toggle');
   groupsWrap.classList.toggle('open', state.ui.groupsOpen);
   groupToggle?.classList.toggle('open', state.ui.groupsOpen);
+  groupToggle?.setAttribute('aria-expanded', String(state.ui.groupsOpen));
   groupsWrap.innerHTML = `
-    <button class="sidebar-inline-add" type="button" onclick="openGroupManage()">+ Добавить группу</button>
     ${state.groups.map(group => {
       const groupProjects = state.subs.filter(project => project.group === group.id);
       const groupToken = inlineToken(group.id);
@@ -2078,7 +2081,8 @@ function renderSidebarLists() {
       class="sidebar-item-row sidebar-group-row${state.currentView === 'group' && activeGroupId === group.id ? ' active' : ''}${sidebarGroupFlyoutId === group.id ? ' flyout-open' : ''}"
       data-group-id="${escapeHtml(group.id)}"
       draggable="true"
-      onmouseenter="positionGroupFlyout(this)"
+      onmouseenter="openGroupFlyoutOnHover(decodeInlineToken('${groupToken}'))"
+      onmouseleave="scheduleGroupFlyoutClose()"
       ondragstart="dragSidebarItem(event, 'group', decodeInlineToken('${groupToken}'))"
       ondragover="allowSidebarItemDrop(event)"
       ondrop="dropSidebarItem(event, 'group', decodeInlineToken('${groupToken}'))"
@@ -2092,7 +2096,7 @@ function renderSidebarLists() {
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
         </button>
       </div>
-      <div class="sidebar-group-flyout" onclick="event.stopPropagation()">
+      <div class="sidebar-group-flyout" onclick="event.stopPropagation()" onmouseenter="cancelGroupFlyoutClose()" onmouseleave="scheduleGroupFlyoutClose()">
         <div class="sidebar-group-flyout-header">
           <div>
             <span class="sidebar-group-flyout-kicker">Группа</span>
@@ -2117,12 +2121,12 @@ function renderSidebarLists() {
   `}).join('')}`;
 
   const projectsWrap = document.getElementById('sidebar-projects');
-  const projectToggle = document.querySelector('.sidebar-action[onclick="toggleSidebarSection(\'projects\')"]');
+  const projectToggle = document.getElementById('sidebar-projects-toggle');
   projectsWrap.classList.toggle('open', state.ui.projectsOpen);
   projectToggle?.classList.toggle('open', state.ui.projectsOpen);
+  projectToggle?.setAttribute('aria-expanded', String(state.ui.projectsOpen));
   const topProjects = getTopSidebarProjects(10);
   projectsWrap.innerHTML = `
-    <button class="sidebar-inline-add" type="button" onclick="openManage()">+ Добавить проект</button>
     ${topProjects.map(project => `
     <div
       class="sidebar-item-row${state.currentView === 'project' && activeProjectId === project.id ? ' active' : ''}"
@@ -2141,9 +2145,46 @@ function renderSidebarLists() {
   `;
 }
 
+function cancelGroupFlyoutClose() {
+  if (_sidebarGroupFlyoutCloseTimer) {
+    clearTimeout(_sidebarGroupFlyoutCloseTimer);
+    _sidebarGroupFlyoutCloseTimer = null;
+  }
+}
+
+function scheduleGroupFlyoutClose() {
+  if (isMobileViewport()) return;
+  cancelGroupFlyoutClose();
+  _sidebarGroupFlyoutCloseTimer = setTimeout(() => {
+    _sidebarGroupFlyoutCloseTimer = null;
+    if (!sidebarGroupFlyoutId) return;
+    sidebarGroupFlyoutId = null;
+    renderSidebarLists();
+  }, 420);
+}
+
+function openGroupFlyoutOnHover(groupId) {
+  if (isMobileViewport()) return;
+  cancelGroupFlyoutClose();
+  if (sidebarGroupFlyoutId === groupId) {
+    const currentRow = [...document.querySelectorAll('.sidebar-group-row')]
+      .find(item => item.dataset.groupId === groupId);
+    positionGroupFlyout(currentRow);
+    return;
+  }
+  sidebarGroupFlyoutId = groupId;
+  renderSidebarLists();
+  requestAnimationFrame(() => {
+    const row = [...document.querySelectorAll('.sidebar-group-row')]
+      .find(item => item.dataset.groupId === groupId);
+    positionGroupFlyout(row);
+  });
+}
+
 function toggleGroupFlyout(event, groupId) {
   event?.preventDefault();
   event?.stopPropagation();
+  cancelGroupFlyoutClose();
   sidebarGroupFlyoutId = sidebarGroupFlyoutId === groupId ? null : groupId;
   renderSidebarLists();
   if (sidebarGroupFlyoutId) {
@@ -3428,6 +3469,7 @@ function openGroupWorkspace(groupId) {
   if (!getGroup(groupId)) return;
   activeGroupId = groupId;
   activeProjectId = null;
+  cancelGroupFlyoutClose();
   sidebarGroupFlyoutId = null;
   groupProjectQuery = '';
   state.currentView = 'group';
