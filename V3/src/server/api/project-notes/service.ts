@@ -3,6 +3,7 @@ import { prisma } from '../../db/client.js';
 import type {
   CreateProjectNoteInput,
   CreateProjectNoteSectionInput,
+  ReorderProjectNotesInput,
   UpdateProjectNoteInput,
   UpdateProjectNoteSectionInput,
 } from './schema.js';
@@ -53,6 +54,69 @@ export async function getProjectNotes(userId: string, workspaceId: string, proje
   ]);
 
   return { sections, notes };
+}
+
+export async function reorderProjectNotes(
+  userId: string,
+  workspaceId: string,
+  projectId: string,
+  input: ReorderProjectNotesInput,
+) {
+  await requireWorkspaceMutationAccess(userId, workspaceId);
+  await requireProject(workspaceId, projectId);
+
+  return prisma.$transaction(async tx => {
+    const [sections, notes] = await Promise.all([
+      tx.projectNoteSection.findMany({
+        where: { workspaceId, projectId },
+        select: { id: true },
+      }),
+      tx.projectNote.findMany({
+        where: { workspaceId, projectId },
+        select: { id: true },
+      }),
+    ]);
+
+    const existingSectionIds = new Set(sections.map(section => section.id));
+    const existingNoteIds = new Set(notes.map(note => note.id));
+    if (
+      input.sectionIds.length !== existingSectionIds.size
+      || input.notes.length !== existingNoteIds.size
+      || input.sectionIds.some(sectionId => !existingSectionIds.has(sectionId))
+      || input.notes.some(note => !existingNoteIds.has(note.id) || !existingSectionIds.has(note.sectionId))
+    ) {
+      throw new Error('PROJECT_NOTE_ORDER_CONFLICT');
+    }
+
+    const nextNoteOrderBySection = new Map<string, number>();
+    await Promise.all([
+      ...input.sectionIds.map((sectionId, sortOrder) => tx.projectNoteSection.update({
+        where: { id: sectionId },
+        data: { sortOrder },
+      })),
+      ...input.notes.map(note => {
+        const sortOrder = nextNoteOrderBySection.get(note.sectionId) ?? 0;
+        nextNoteOrderBySection.set(note.sectionId, sortOrder + 1);
+        return tx.projectNote.update({
+          where: { id: note.id },
+          data: { sectionId: note.sectionId, sortOrder },
+        });
+      }),
+    ]);
+
+    const [orderedSections, orderedNotes] = await Promise.all([
+      tx.projectNoteSection.findMany({
+        where: { workspaceId, projectId },
+        orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
+      }),
+      tx.projectNote.findMany({
+        where: { workspaceId, projectId },
+        orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
+      }),
+    ]);
+
+    return { sections: orderedSections, notes: orderedNotes };
+  });
 }
 
 export async function createProjectNoteSection(

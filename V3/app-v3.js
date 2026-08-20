@@ -97,6 +97,11 @@ let projectNotesLoadingProjectId = null;
 let projectNotesError = '';
 let manageProjectNoteId = null;
 let manageProjectNoteSectionId = null;
+let _projectBoardDrag = null;
+let _projectBoardDropPosition = 'before';
+let _projectBoardOrderRevision = 0;
+let _projectBoardSaveQueue = Promise.resolve();
+let _projectBoardSuppressClickUntil = 0;
 let manageWishItemId = null;
 let manageWishListId = null;
 let newWishListColor = COLORS[0];
@@ -1610,6 +1615,15 @@ function escapeHtml(value) {
     .replaceAll('>', '&gt;')
     .replaceAll('"', '&quot;')
     .replaceAll("'", '&#39;');
+}
+
+function pluralizeRu(value, one, few, many) {
+  const amount = Math.abs(Number(value) || 0) % 100;
+  const lastDigit = amount % 10;
+  if (amount > 10 && amount < 20) return many;
+  if (lastDigit === 1) return one;
+  if (lastDigit >= 2 && lastDigit <= 4) return few;
+  return many;
 }
 
 function inlineToken(value) {
@@ -3313,8 +3327,23 @@ function renderProjectNoteCards(project, sections, notes) {
         const sectionNotes = notes.filter(note => note.sectionId === section.id);
         const sectionToken = inlineToken(section.id);
         return `
-          <section class="project-note-column" style="--column-delay:${Math.min(sectionIndex, 8) * 45}ms">
-            <header class="project-note-column-header">
+          <section
+            class="project-note-column"
+            data-project-note-section-id="${escapeHtml(section.id)}"
+            style="--column-delay:${Math.min(sectionIndex, 8) * 45}ms"
+            ondragover="allowProjectSectionDrop(event, decodeInlineToken('${sectionToken}'))"
+            ondragleave="leaveProjectBoardDrop(event)"
+            ondrop="dropProjectSection(event, decodeInlineToken('${sectionToken}'))"
+          >
+            <header
+              class="project-note-column-header"
+              draggable="true"
+              ondragstart="startProjectSectionDrag(event, decodeInlineToken('${sectionToken}'))"
+              ondragend="endProjectBoardDrag(event)"
+            >
+              <span class="project-note-column-drag" aria-hidden="true" title="Перетащить раздел">
+                <i></i><i></i><i></i><i></i><i></i><i></i>
+              </span>
               <button class="project-note-column-title" type="button" onclick="openProjectNoteSectionModal(decodeInlineToken('${sectionToken}'))">
                 <span>${escapeHtml(section.name)}</span>
                 <span class="project-note-column-count">${sectionNotes.length}</span>
@@ -3323,16 +3352,31 @@ function renderProjectNoteCards(project, sections, notes) {
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg>
               </button>
             </header>
-            <div class="project-note-column-list">
+            <div
+              class="project-note-column-list"
+              ondragover="allowProjectNoteListDrop(event, decodeInlineToken('${sectionToken}'))"
+              ondragleave="leaveProjectBoardDrop(event)"
+              ondrop="dropProjectNote(event, decodeInlineToken('${sectionToken}'))"
+            >
               ${sectionNotes.map((note, noteIndex) => {
                 const preview = note.body.trim().replace(/\s+/g, ' ').slice(0, 220);
                 return `
                   <button
                     class="project-note-card"
                     type="button"
+                    draggable="true"
+                    data-project-note-id="${escapeHtml(note.id)}"
                     style="--project-note-color:${project.color};--note-delay:${Math.min(noteIndex, 8) * 35}ms"
-                    onclick="openProjectNoteModal(decodeInlineToken('${inlineToken(note.id)}'))"
+                    onclick="openProjectNoteFromBoard(decodeInlineToken('${inlineToken(note.id)}'))"
+                    ondragstart="startProjectNoteDrag(event, decodeInlineToken('${inlineToken(note.id)}'), decodeInlineToken('${sectionToken}'))"
+                    ondragover="allowProjectNoteCardDrop(event, decodeInlineToken('${inlineToken(note.id)}'), decodeInlineToken('${sectionToken}'))"
+                    ondragleave="leaveProjectBoardDrop(event)"
+                    ondrop="dropProjectNote(event, decodeInlineToken('${sectionToken}'), decodeInlineToken('${inlineToken(note.id)}'))"
+                    ondragend="endProjectBoardDrag(event)"
                   >
+                    <span class="project-note-card-drag" aria-hidden="true" title="Перетащить заметку">
+                      <i></i><i></i><i></i><i></i><i></i><i></i>
+                    </span>
                     <span class="project-note-card-title">${escapeHtml(note.title)}</span>
                     ${preview ? `<span class="project-note-card-preview">${escapeHtml(preview)}</span>` : ''}
                     <span class="project-note-card-footer">
@@ -3355,6 +3399,214 @@ function renderProjectNoteCards(project, sections, notes) {
       </button>
     </div>
   </div>`;
+}
+
+function openProjectNoteFromBoard(noteId) {
+  if (Date.now() < _projectBoardSuppressClickUntil) return;
+  openProjectNoteModal(noteId);
+}
+
+function clearProjectBoardDropState() {
+  document.querySelectorAll(
+    '.project-note-column.is-drop-before, .project-note-column.is-drop-after, .project-note-column.is-note-drop-target, .project-note-card.is-drop-before, .project-note-card.is-drop-after',
+  ).forEach(node => node.classList.remove(
+    'is-drop-before',
+    'is-drop-after',
+    'is-note-drop-target',
+  ));
+}
+
+function startProjectSectionDrag(event, sectionId) {
+  if (event.target.closest('button')) {
+    event.preventDefault();
+    return;
+  }
+  _projectBoardDrag = { type: 'section', id: sectionId };
+  _projectBoardSuppressClickUntil = Date.now() + 350;
+  event.currentTarget.closest('.project-note-column')?.classList.add('is-dragging');
+  event.dataTransfer.effectAllowed = 'move';
+  event.dataTransfer.setData('text/plain', `project-section:${sectionId}`);
+}
+
+function startProjectNoteDrag(event, noteId, sectionId) {
+  event.stopPropagation();
+  _projectBoardDrag = { type: 'note', id: noteId, sectionId };
+  _projectBoardSuppressClickUntil = Date.now() + 350;
+  event.currentTarget.classList.add('is-dragging');
+  event.dataTransfer.effectAllowed = 'move';
+  event.dataTransfer.setData('text/plain', `project-note:${noteId}`);
+}
+
+function endProjectBoardDrag(event) {
+  event?.currentTarget?.classList.remove('is-dragging');
+  document.querySelectorAll('.project-note-column.is-dragging, .project-note-card.is-dragging')
+    .forEach(node => node.classList.remove('is-dragging'));
+  clearProjectBoardDropState();
+  _projectBoardDrag = null;
+  _projectBoardSuppressClickUntil = Date.now() + 250;
+}
+
+function allowProjectSectionDrop(event, sectionId) {
+  if (_projectBoardDrag?.type !== 'section' || _projectBoardDrag.id === sectionId) return;
+  event.preventDefault();
+  event.dataTransfer.dropEffect = 'move';
+  clearProjectBoardDropState();
+  const column = event.currentTarget;
+  const position = event.clientX >= column.getBoundingClientRect().left + column.offsetWidth / 2
+    ? 'after'
+    : 'before';
+  _projectBoardDropPosition = position;
+  column.classList.add(position === 'after' ? 'is-drop-after' : 'is-drop-before');
+}
+
+function allowProjectNoteListDrop(event, sectionId) {
+  if (_projectBoardDrag?.type !== 'note') return;
+  if (event.target.closest('.project-note-card')) return;
+  event.preventDefault();
+  event.stopPropagation();
+  event.dataTransfer.dropEffect = 'move';
+  clearProjectBoardDropState();
+  event.currentTarget.closest('.project-note-column')?.classList.add('is-note-drop-target');
+  _projectBoardDropPosition = 'after';
+}
+
+function allowProjectNoteCardDrop(event, noteId, sectionId) {
+  if (_projectBoardDrag?.type !== 'note' || _projectBoardDrag.id === noteId) return;
+  event.preventDefault();
+  event.stopPropagation();
+  event.dataTransfer.dropEffect = 'move';
+  clearProjectBoardDropState();
+  const card = event.currentTarget;
+  const position = event.clientY >= card.getBoundingClientRect().top + card.offsetHeight / 2
+    ? 'after'
+    : 'before';
+  _projectBoardDropPosition = position;
+  card.classList.add(position === 'after' ? 'is-drop-after' : 'is-drop-before');
+  card.closest('.project-note-column')?.classList.add('is-note-drop-target');
+}
+
+function leaveProjectBoardDrop(event) {
+  if (event.currentTarget.contains(event.relatedTarget)) return;
+  event.currentTarget.classList.remove('is-drop-before', 'is-drop-after', 'is-note-drop-target');
+}
+
+function buildProjectBoardOrderPayload(projectId) {
+  const sections = projectNoteSectionsByProject[projectId] || [];
+  const notes = projectNotesByProject[projectId] || [];
+  return {
+    sectionIds: sections.map(section => section.id),
+    notes: sections.flatMap(section => notes
+      .filter(note => note.sectionId === section.id)
+      .map(note => ({ id: note.id, sectionId: section.id }))),
+  };
+}
+
+function commitProjectBoardOrder(projectId) {
+  const revision = ++_projectBoardOrderRevision;
+  const payload = buildProjectBoardOrderPayload(projectId);
+  document.querySelector('.project-board')?.classList.add('is-saving-order');
+
+  _projectBoardSaveQueue = _projectBoardSaveQueue
+    .catch(() => undefined)
+    .then(async () => {
+      const board = await apiJson(`/api/projects/${encodeURIComponent(projectId)}/notes/reorder`, {
+        method: 'PATCH',
+        body: JSON.stringify(payload),
+      });
+      if (revision !== _projectBoardOrderRevision) return;
+      projectNoteSectionsByProject[projectId] = (board?.sections || []).map(normalizeProjectNoteSection);
+      projectNotesByProject[projectId] = (board?.notes || []).map(normalizeProjectNote);
+      if (state.currentView === 'project' && activeProjectId === projectId) {
+        renderProjectWorkspaceView();
+      }
+      void markProjectActivity(projectId, 'WORK');
+    })
+    .catch(async error => {
+      console.error(error);
+      if (revision !== _projectBoardOrderRevision) return;
+      try {
+        const board = await apiJson(`/api/projects/${encodeURIComponent(projectId)}/notes`, {
+          method: 'GET',
+          headers: {},
+        });
+        projectNoteSectionsByProject[projectId] = (board?.sections || []).map(normalizeProjectNoteSection);
+        projectNotesByProject[projectId] = (board?.notes || []).map(normalizeProjectNote);
+      } catch (reloadError) {
+        console.error(reloadError);
+      }
+      if (state.currentView === 'project' && activeProjectId === projectId) {
+        renderProjectWorkspaceView();
+      }
+      showToast('Не удалось сохранить порядок');
+    });
+}
+
+function dropProjectSection(event, targetSectionId) {
+  if (_projectBoardDrag?.type !== 'section') return;
+  event.preventDefault();
+  event.stopPropagation();
+  const projectId = activeProjectId;
+  const movingSectionId = _projectBoardDrag.id;
+  const sections = [...(projectNoteSectionsByProject[projectId] || [])];
+  if (!projectId || movingSectionId === targetSectionId) {
+    endProjectBoardDrag(event);
+    return;
+  }
+  const moving = sections.find(section => section.id === movingSectionId);
+  const nextSections = sections.filter(section => section.id !== movingSectionId);
+  let targetIndex = nextSections.findIndex(section => section.id === targetSectionId);
+  if (!moving || targetIndex < 0) {
+    endProjectBoardDrag(event);
+    return;
+  }
+  if (_projectBoardDropPosition === 'after') targetIndex += 1;
+  nextSections.splice(targetIndex, 0, moving);
+  projectNoteSectionsByProject[projectId] = nextSections.map((section, sortOrder) => ({ ...section, sortOrder }));
+  endProjectBoardDrag(event);
+  renderProjectWorkspaceView();
+  commitProjectBoardOrder(projectId);
+}
+
+function dropProjectNote(event, targetSectionId, targetNoteId = null) {
+  if (_projectBoardDrag?.type !== 'note') return;
+  event.preventDefault();
+  event.stopPropagation();
+  const projectId = activeProjectId;
+  const movingNoteId = _projectBoardDrag.id;
+  if (targetNoteId === movingNoteId) {
+    endProjectBoardDrag(event);
+    return;
+  }
+  const sections = projectNoteSectionsByProject[projectId] || [];
+  const notes = projectNotesByProject[projectId] || [];
+  const moving = notes.find(note => note.id === movingNoteId);
+  if (!projectId || !moving || !sections.some(section => section.id === targetSectionId)) {
+    endProjectBoardDrag(event);
+    return;
+  }
+
+  const notesBySection = new Map(sections.map(section => [
+    section.id,
+    notes.filter(note => note.sectionId === section.id && note.id !== movingNoteId),
+  ]));
+  const targetNotes = notesBySection.get(targetSectionId) || [];
+  let targetIndex = targetNoteId ? targetNotes.findIndex(note => note.id === targetNoteId) : targetNotes.length;
+  if (targetIndex < 0) targetIndex = targetNotes.length;
+  if (targetNoteId && _projectBoardDropPosition === 'after') targetIndex += 1;
+  targetNotes.splice(targetIndex, 0, { ...moving, sectionId: targetSectionId });
+  notesBySection.set(targetSectionId, targetNotes);
+
+  const orderedNoteIds = new Set();
+  const orderedNotes = sections.flatMap(section => (notesBySection.get(section.id) || []).map((note, sortOrder) => {
+    orderedNoteIds.add(note.id);
+    return { ...note, sectionId: section.id, sortOrder };
+  }));
+  const orphanNotes = notes.filter(note => !orderedNoteIds.has(note.id));
+  projectNotesByProject[projectId] = [...orderedNotes, ...orphanNotes];
+
+  endProjectBoardDrag(event);
+  renderProjectWorkspaceView();
+  commitProjectBoardOrder(projectId);
 }
 
 function renderProjectWorkspaceView() {
@@ -4034,6 +4286,20 @@ function renderSettingsView() {
       </section>
 
       <div class="account-side">
+        <section class="settings-card settings-recurring-card">
+          <div class="settings-recurring-heading">
+            <span class="settings-recurring-icon" aria-hidden="true">∞</span>
+            <div>
+              <div class="settings-card-title">Постоянные задачи</div>
+              <div class="settings-recurring-count">${state.recurring.length} ${pluralizeRu(state.recurring.length, 'правило', 'правила', 'правил')}</div>
+            </div>
+          </div>
+          <div class="settings-copy">Задачи, которые автоматически появляются в выбранный день каждую неделю.</div>
+          <div class="settings-actions-row">
+            <button type="button" onclick="openRecurringManage()">Управлять</button>
+          </div>
+        </section>
+
         <section class="settings-card">
           <div class="settings-card-title">Данные</div>
           <div class="settings-copy">
@@ -5192,6 +5458,7 @@ function setGroupProjectTemplate(groupId, enabled) {
 }
 
 function openRecurringManage(recurringId = null) {
+  closeSidebar();
   manageRecurringId = recurringId;
   renderRecurringProjectOptions();
   renderRecurringFilters();

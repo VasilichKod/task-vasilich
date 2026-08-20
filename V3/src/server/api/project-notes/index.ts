@@ -4,6 +4,7 @@ export {
   handleDeleteProjectNoteSectionRequest,
   handleDeleteProjectNoteRequest,
   handleGetProjectNotesRequest,
+  handleReorderProjectNotesRequest,
   handleUpdateProjectNoteSectionRequest,
   handleUpdateProjectNoteRequest,
 } from './http.js';

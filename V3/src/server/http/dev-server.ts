@@ -26,6 +26,7 @@ import {
   handleDeleteProjectNoteSectionRequest,
   handleDeleteProjectNoteRequest,
   handleGetProjectNotesRequest,
+  handleReorderProjectNotesRequest,
   handleUpdateProjectNoteSectionRequest,
   handleUpdateProjectNoteRequest,
 } from '../api/project-notes/index.js';
@@ -253,6 +254,11 @@ async function route(request: Request) {
 
   if (request.method === 'POST' && projectNotesMatch) {
     return withCors(request, await handleCreateProjectNoteRequest(request, projectNotesMatch[1]));
+  }
+
+  const projectNotesReorderMatch = url.pathname.match(/^\/api\/projects\/([^/]+)\/notes\/reorder$/);
+  if (request.method === 'PATCH' && projectNotesReorderMatch) {
+    return withCors(request, await handleReorderProjectNotesRequest(request, projectNotesReorderMatch[1]));
   }
 
   const projectNoteSectionsMatch = url.pathname.match(/^\/api\/projects\/([^/]+)\/note-sections$/);

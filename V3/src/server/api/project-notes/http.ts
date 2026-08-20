@@ -7,6 +7,7 @@ import {
   deleteProjectNoteSection,
   deleteProjectNote,
   getProjectNotes,
+  reorderProjectNotes,
   updateProjectNoteSection,
   updateProjectNote,
 } from './service.js';
@@ -14,6 +15,7 @@ import {
   createProjectNoteSchema,
   createProjectNoteSectionSchema,
   projectNoteIdSchema,
+  reorderProjectNotesSchema,
   updateProjectNoteSectionSchema,
   updateProjectNoteSchema,
 } from './schema.js';
@@ -51,6 +53,18 @@ export async function handleCreateProjectNoteRequest(request: Request, projectId
     return json({ ok: true, data }, 201);
   } catch (error) {
     return handleProjectNotesError(error, 'CREATE_PROJECT_NOTE_FAILED');
+  }
+}
+
+export async function handleReorderProjectNotesRequest(request: Request, projectId: string) {
+  try {
+    const session = await getAuthorizedSession(request);
+    const params = projectNoteIdSchema.parse({ id: projectId });
+    const body = reorderProjectNotesSchema.parse(await request.json());
+    const data = await reorderProjectNotes(session.userId, session.workspaceId, params.id, body);
+    return json({ ok: true, data });
+  } catch (error) {
+    return handleProjectNotesError(error, 'REORDER_PROJECT_NOTES_FAILED');
   }
 }
 
@@ -132,6 +146,9 @@ function handleProjectNotesError(error: unknown, fallbackCode: string) {
       return json({ ok: false, error: error.message }, 404);
     }
     if (error.message === 'PROJECT_NOTE_SECTION_NOT_EMPTY') {
+      return json({ ok: false, error: error.message }, 409);
+    }
+    if (error.message === 'PROJECT_NOTE_ORDER_CONFLICT') {
       return json({ ok: false, error: error.message }, 409);
     }
     return json({ ok: false, error: fallbackCode, message: error.message }, 500);

@@ -26,7 +26,24 @@ export const updateProjectNoteSectionSchema = z.object({
   name: z.string().trim().min(1).max(120),
 });
 
+const orderedIdListSchema = z.array(z.string().trim().min(1)).max(200).refine(
+  ids => new Set(ids).size === ids.length,
+  { message: 'IDs must be unique' },
+);
+
+export const reorderProjectNotesSchema = z.object({
+  sectionIds: orderedIdListSchema,
+  notes: z.array(z.object({
+    id: z.string().trim().min(1),
+    sectionId: z.string().trim().min(1),
+  })).max(2000).refine(
+    notes => new Set(notes.map(note => note.id)).size === notes.length,
+    { message: 'Note IDs must be unique' },
+  ),
+});
+
 export type CreateProjectNoteInput = z.infer<typeof createProjectNoteSchema>;
 export type UpdateProjectNoteInput = z.infer<typeof updateProjectNoteSchema>;
 export type CreateProjectNoteSectionInput = z.infer<typeof createProjectNoteSectionSchema>;
 export type UpdateProjectNoteSectionInput = z.infer<typeof updateProjectNoteSectionSchema>;
+export type ReorderProjectNotesInput = z.infer<typeof reorderProjectNotesSchema>;
