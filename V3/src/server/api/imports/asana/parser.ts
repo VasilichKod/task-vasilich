@@ -10,6 +10,13 @@ type AsanaSectionRef = {
   name: string;
 };
 
+export type AsanaComment = {
+  gid: string;
+  text: string;
+  authorName: string;
+  createdAt: string | null;
+};
+
 export type AsanaTask = {
   gid: string;
   name: string;
@@ -26,6 +33,7 @@ export type AsanaTask = {
     section: AsanaSectionRef | null;
   }>;
   projects: AsanaProjectRef[];
+  comments: AsanaComment[];
   subtasks: AsanaTask[];
 };
 
@@ -44,6 +52,7 @@ export type ParsedAsanaExport = {
   }>;
   completedTaskCount: number;
   subtaskCount: number;
+  commentCount: number;
 };
 
 const projectRefSchema = z.object({
@@ -54,6 +63,18 @@ const projectRefSchema = z.object({
 const sectionRefSchema = z.object({
   gid: z.string().trim().min(1),
   name: z.string().trim().min(1).max(240),
+}).passthrough();
+
+const rawCommentSchema = z.object({
+  gid: z.string().nullish(),
+  resource_subtype: z.string().nullish(),
+  type: z.string().nullish(),
+  text: z.string().nullish(),
+  html_text: z.string().nullish(),
+  created_at: z.string().nullish(),
+  created_by: z.object({
+    name: z.string().nullish(),
+  }).passthrough().nullish(),
 }).passthrough();
 
 const rawTaskSchema = z.object({
@@ -72,6 +93,8 @@ const rawTaskSchema = z.object({
     section: sectionRefSchema.nullish(),
   }).passthrough()).optional(),
   projects: z.array(projectRefSchema).optional(),
+  stories: z.array(z.unknown()).optional(),
+  comments: z.array(z.unknown()).optional(),
   subtasks: z.array(z.unknown()).optional(),
 }).passthrough();
 
@@ -79,6 +102,62 @@ const exportRootSchema = z.union([
   z.object({ data: z.array(z.unknown()).min(1).max(5000) }).passthrough().transform(value => value.data),
   z.array(z.unknown()).min(1).max(5000),
 ]);
+
+function htmlToPlainText(value: string) {
+  return value
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/p\s*>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .trim();
+}
+
+function parseComment(value: unknown, assumeComment: boolean): AsanaComment | null {
+  if (typeof value === 'string') {
+    const text = value.trim();
+    return assumeComment && text ? { gid: '', text, authorName: '', createdAt: null } : null;
+  }
+
+  const result = rawCommentSchema.safeParse(value);
+  if (!result.success) return null;
+  const parsed = result.data;
+  const isComment = assumeComment
+    || parsed.resource_subtype === 'comment_added'
+    || parsed.type === 'comment';
+  if (!isComment) return null;
+
+  const text = (parsed.text || htmlToPlainText(parsed.html_text || '')).trim();
+  if (!text) return null;
+  return {
+    gid: parsed.gid || '',
+    text,
+    authorName: parsed.created_by?.name?.trim() || '',
+    createdAt: parsed.created_at || null,
+  };
+}
+
+function parseComments(stories: unknown[], comments: unknown[]) {
+  const parsed = [
+    ...stories.map(item => parseComment(item, false)),
+    ...comments.map(item => parseComment(item, true)),
+  ].filter((item): item is AsanaComment => Boolean(item));
+  const seen = new Set<string>();
+  return parsed.filter(comment => {
+    const key = comment.gid || `${comment.createdAt || ''}\n${comment.authorName}\n${comment.text}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+export function parseAsanaStoryComments(stories: unknown[]) {
+  return parseComments(stories, []);
+}
 
 function parseTask(value: unknown, depth = 0): AsanaTask {
   if (depth > 12) throw new Error('ASANA_NESTING_TOO_DEEP');
@@ -100,6 +179,7 @@ function parseTask(value: unknown, depth = 0): AsanaTask {
       section: item.section ? { gid: item.section.gid, name: item.section.name } : null,
     })),
     projects: (parsed.projects || []).map(item => ({ gid: item.gid, name: item.name })),
+    comments: parseComments(parsed.stories || [], parsed.comments || []),
     subtasks,
   };
 }
@@ -111,6 +191,13 @@ function countSubtasks(tasks: AsanaTask[]) {
     count += countSubtasks(task.subtasks);
   }
   return count;
+}
+
+function countComments(tasks: AsanaTask[]): number {
+  return tasks.reduce(
+    (total, task) => total + task.comments.length + countComments(task.subtasks),
+    0,
+  );
 }
 
 function inferProject(tasks: AsanaTask[]) {
@@ -169,6 +256,7 @@ export function parseAsanaExport(value: unknown): ParsedAsanaExport {
     sections: [...sections.values()],
     completedTaskCount: parsedTasks.filter(task => task.completed).length,
     subtaskCount: countSubtasks(parsedTasks),
+    commentCount: countComments(parsedTasks),
   };
 }
 
@@ -181,6 +269,7 @@ export function buildAsanaPreview(value: unknown) {
     completedTaskCount: parsed.completedTaskCount,
     openTaskCount: parsed.tasks.length - parsed.completedTaskCount,
     subtaskCount: parsed.subtaskCount,
+    commentCount: parsed.commentCount,
     sectionCount: parsed.sections.length,
     sections: parsed.sections.map(section => ({ name: section.name, taskCount: section.taskCount })),
   };

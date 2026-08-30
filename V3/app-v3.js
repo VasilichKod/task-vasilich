@@ -133,6 +133,7 @@ let asanaImportState = {
   color: COLORS[4],
   includeCompleted: true,
   includeSourceLinks: true,
+  asanaAccessToken: '',
   conflictMode: 'skip',
   loading: false,
   error: '',
@@ -4686,6 +4687,7 @@ function resetAsanaImportState() {
     color: COLORS[4],
     includeCompleted: true,
     includeSourceLinks: true,
+    asanaAccessToken: '',
     conflictMode: 'skip',
     loading: false,
     error: '',
@@ -4701,6 +4703,7 @@ function openAsanaImport() {
 
 function closeAsanaImport() {
   if (asanaImportState.loading) return;
+  asanaImportState.asanaAccessToken = '';
   document.getElementById('asana-import-modal')?.classList.remove('open');
 }
 
@@ -4710,6 +4713,9 @@ function getAsanaImportErrorMessage(code) {
     INVALID_ASANA_EXPORT: 'В JSON не найден экспорт задач Asana.',
     ASANA_PROJECT_NOT_FOUND: 'Не удалось определить проект Asana.',
     ASANA_EXPORT_TOO_LARGE: 'В этом файле слишком много задач для одного импорта.',
+    ASANA_TOKEN_INVALID: 'Токен Asana не подошёл или у него нет доступа к этому проекту.',
+    ASANA_COMMENTS_RATE_LIMITED: 'Asana временно ограничила запросы комментариев. Подожди минуту и повтори импорт.',
+    ASANA_COMMENTS_FETCH_FAILED: 'Не удалось получить комментарии из Asana. Проверь токен и повтори импорт.',
     PROJECT_NOT_FOUND: 'Выбранный проект больше недоступен.',
     GROUP_NOT_FOUND: 'Выбранная группа больше недоступна.',
   };
@@ -4793,6 +4799,18 @@ function updateAsanaImportOption(key, value) {
   if (key === 'targetValue' || key === 'includeCompleted') renderAsanaImportModal();
 }
 
+function updateAsanaImportToken(value) {
+  asanaImportState.asanaAccessToken = value;
+  if (
+    value.trim()
+    && asanaImportState.targetValue !== '__new__'
+    && asanaImportState.conflictMode === 'skip'
+  ) {
+    asanaImportState.conflictMode = 'update';
+    renderAsanaImportModal();
+  }
+}
+
 function renderAsanaImportModal() {
   const root = document.getElementById('asana-import-content');
   if (!root) return;
@@ -4804,7 +4822,7 @@ function renderAsanaImportModal() {
         <span class="asana-import-success-mark" aria-hidden="true">✓</span>
         <div class="asana-import-kicker">Импорт завершён</div>
         <h3>${escapeHtml(result.project.name)}</h3>
-        <p>Секции Asana стали столбиками, задачи — карточками, а подзадачи и описания сохранены внутри карточек.</p>
+        <p>Секции Asana стали столбиками, задачи — карточками, а описания, комментарии и подзадачи сохранены внутри карточек.</p>
         <div class="asana-import-result-grid">
           <span><strong>${result.createdSectionCount}</strong><small>новых столбиков</small></span>
           <span><strong>${result.createdTaskCount}</strong><small>новых карточек</small></span>
@@ -4837,7 +4855,7 @@ function renderAsanaImportModal() {
       ${asanaImportState.error ? `<div class="asana-import-error">${escapeHtml(asanaImportState.error)}</div>` : ''}
       <div class="asana-import-privacy">
         <strong>Важно</strong>
-        <span>Описания и подзадачи перенесутся целиком. Если в Asana хранятся пароли или доступы, они тоже попадут в твой аккаунт «НеПлана».</span>
+        <span>Описания, комментарии и подзадачи перенесутся целиком. Если в Asana хранятся пароли или доступы, они тоже попадут в твой аккаунт «НеПлана».</span>
       </div>`;
     return;
   }
@@ -4856,6 +4874,7 @@ function renderAsanaImportModal() {
           <span><strong>${preview.sectionCount}</strong><small>секций</small></span>
           <span><strong>${preview.taskCount}</strong><small>задач</small></span>
           <span><strong>${preview.subtaskCount}</strong><small>подзадач</small></span>
+          <span><strong>${preview.commentCount}</strong><small>комментариев</small></span>
           <span><strong>${preview.completedTaskCount}</strong><small>выполнено</small></span>
         </div>
         <div class="asana-import-section-list">
@@ -4900,6 +4919,19 @@ function renderAsanaImportModal() {
           <span><strong>Ссылки на Asana</strong><small>Добавить исходную ссылку в каждую карточку</small></span>
           <input type="checkbox" ${asanaImportState.includeSourceLinks ? 'checked' : ''} onchange="updateAsanaImportOption('includeSourceLinks', this.checked)" />
         </label>
+        <div class="asana-import-comments-access${preview.commentCount ? ' has-comments' : ''}">
+          <div>
+            <strong>Комментарии Asana</strong>
+            <small>${preview.commentCount
+              ? `В файле найдено: ${preview.commentCount}. Токен нужен только если в Asana их больше.`
+              : 'Обычный JSON Asana не содержит комментарии. Токен позволит получить их через API.'}</small>
+          </div>
+          <label class="field-group">
+            <span class="form-label">Персональный токен Asana — необязательно</span>
+            <input type="password" autocomplete="new-password" spellcheck="false" placeholder="Вставь токен, чтобы перенести комментарии" value="${escapeHtml(asanaImportState.asanaAccessToken)}" oninput="asanaImportState.asanaAccessToken = this.value" onchange="updateAsanaImportToken(this.value)" />
+          </label>
+          <small class="asana-import-token-note">Используется только во время импорта и нигде не сохраняется. Для существующего проекта режим ниже переключится на обновление карточек.</small>
+        </div>
         <label class="field-group asana-import-conflicts">
           <span class="form-label">Если файл импортировали раньше</span>
           <select onchange="updateAsanaImportOption('conflictMode', this.value)">
@@ -4926,6 +4958,8 @@ async function runAsanaImport() {
     return;
   }
 
+  const asanaAccessToken = asanaImportState.asanaAccessToken.trim();
+  asanaImportState.asanaAccessToken = '';
   asanaImportState.loading = true;
   asanaImportState.error = '';
   renderAsanaImportModal();
@@ -4943,6 +4977,9 @@ async function runAsanaImport() {
       body: JSON.stringify({
         exportData: asanaImportState.exportData,
         target,
+        ...(asanaAccessToken
+          ? { asanaAccessToken }
+          : {}),
         includeCompleted: asanaImportState.includeCompleted,
         includeSourceLinks: asanaImportState.includeSourceLinks,
         conflictMode: asanaImportState.conflictMode,

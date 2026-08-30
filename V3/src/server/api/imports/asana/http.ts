@@ -58,6 +58,9 @@ function handleAsanaImportError(error: unknown, fallbackCode: string) {
       error.message === 'ASANA_PROJECT_NOT_FOUND'
       || error.message === 'ASANA_EXPORT_TOO_LARGE'
       || error.message === 'ASANA_NESTING_TOO_DEEP'
+      || error.message === 'ASANA_TOKEN_INVALID'
+      || error.message === 'ASANA_COMMENTS_RATE_LIMITED'
+      || error.message === 'ASANA_COMMENTS_FETCH_FAILED'
     ) {
       return json({ ok: false, error: error.message }, 400);
     }

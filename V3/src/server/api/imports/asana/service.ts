@@ -1,6 +1,12 @@
 import { requireWorkspaceAccess, requireWorkspaceMutationAccess } from '../../../auth/workspace-access.js';
 import { prisma } from '../../../db/client.js';
-import { buildAsanaPreview, parseAsanaExport, type AsanaTask } from './parser.js';
+import {
+  buildAsanaPreview,
+  parseAsanaExport,
+  type AsanaComment,
+  type AsanaTask,
+} from './parser.js';
+import { enrichAsanaTasksWithComments } from './comments.js';
 import type { AsanaImportInput } from './schema.js';
 
 const SOURCE_SYSTEM = 'asana';
@@ -12,6 +18,29 @@ function clampText(value: string, maxLength: number) {
   return `${clean.slice(0, Math.max(0, maxLength - 24)).trimEnd()}\n\n[Текст сокращён при импорте]`;
 }
 
+function formatCommentDate(value: string | null) {
+  if (!value) return '';
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2}))?/);
+  if (!match) return value;
+  const [, year, month, day, hour, minute] = match;
+  return `${day}.${month}.${year}${hour && minute ? ` ${hour}:${minute}` : ''}`;
+}
+
+function formatComments(comments: AsanaComment[], indent = '') {
+  if (!comments.length) return [];
+  const lines = [`${indent}Комментарии`];
+  for (const comment of comments) {
+    const signature = [formatCommentDate(comment.createdAt), comment.authorName]
+      .filter(Boolean)
+      .join(' · ');
+    lines.push(`${indent}${signature ? `[${signature}]` : '—'}`);
+    for (const line of comment.text.split(/\r?\n/)) {
+      lines.push(`${indent}${line}`.trimEnd());
+    }
+  }
+  return lines;
+}
+
 function formatSubtask(task: AsanaTask, depth: number, includeSourceLinks: boolean): string[] {
   const indent = '  '.repeat(depth);
   const lines = [`${indent}${task.completed ? '☑' : '☐'} ${task.name}`];
@@ -20,6 +49,9 @@ function formatSubtask(task: AsanaTask, depth: number, includeSourceLinks: boole
     for (const line of details.split(/\r?\n/)) {
       lines.push(`${indent}  ${line}`.trimEnd());
     }
+  }
+  if (task.comments.length) {
+    lines.push(...formatComments(task.comments, `${indent}  `));
   }
   const dueDate = task.dueOn || task.dueAt;
   if (dueDate) lines.push(`${indent}  Срок: ${dueDate}`);
@@ -30,9 +62,10 @@ function formatSubtask(task: AsanaTask, depth: number, includeSourceLinks: boole
   return lines;
 }
 
-function buildTaskBody(task: AsanaTask, includeSourceLinks: boolean) {
+export function buildAsanaTaskBody(task: AsanaTask, includeSourceLinks: boolean) {
   const blocks: string[] = [];
   if (task.notes.trim()) blocks.push(task.notes.trim());
+  if (task.comments.length) blocks.push(formatComments(task.comments).join('\n'));
 
   const meta: string[] = [];
   if (task.completed) meta.push('Статус в Asana: выполнено');
@@ -79,6 +112,9 @@ export async function importAsanaProject(
   const importedTasks = input.includeCompleted
     ? parsed.tasks
     : parsed.tasks.filter(task => !task.completed);
+  if (input.asanaAccessToken) {
+    await enrichAsanaTasksWithComments(importedTasks, input.asanaAccessToken);
+  }
   const importedSectionIds = new Set(importedTasks.map(task => task.sectionSourceId));
   const importedSections = parsed.sections.filter(section => importedSectionIds.has(section.sourceId));
 
@@ -201,7 +237,7 @@ export async function importAsanaProject(
       }
 
       const title = clampText(task.name, 240);
-      const body = buildTaskBody(task, input.includeSourceLinks);
+      const body = buildAsanaTaskBody(task, input.includeSourceLinks);
       if (existingNote) {
         const sectionChanged = existingNote.sectionId !== section.id;
         const sortOrder = sectionChanged
@@ -270,6 +306,17 @@ export async function importAsanaProject(
         (total, task) => total + countNestedTasks(task.subtasks),
         0,
       ),
+      importedCommentCount: importedTasks.reduce(
+        (total, task) => total + task.comments.length + countComments(task.subtasks),
+        0,
+      ),
     };
   }, { timeout: 30000 });
+}
+
+function countComments(tasks: AsanaTask[]): number {
+  return tasks.reduce(
+    (total, task) => total + task.comments.length + countComments(task.subtasks),
+    0,
+  );
 }
