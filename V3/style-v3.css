@@ -3549,7 +3549,76 @@ button[id$="-delete-btn"]:hover {
 .project-note-skeleton-column span:first-child { width: 58%; height: 14px; }
 .project-note-skeleton-column span:nth-child(2) { width: 92%; margin-top: 26px; }
 .project-note-skeleton-column span:nth-child(3) { width: 72%; }
-.project-note-section-modal { width: min(480px, calc(100vw - 24px)); }
+.project-note-section-modal { width: min(520px, calc(100vw - 24px)); }
+.project-note-section-delete-view {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.project-note-section-delete-intro {
+  margin: 0 0 2px;
+  color: var(--text2);
+  font: 400 13px/1.55 var(--font-sans);
+}
+.project-note-section-delete-choice {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 15px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface2);
+}
+.project-note-section-delete-choice.danger-choice {
+  border-color: rgba(217, 59, 59, 0.24);
+  background: rgba(217, 59, 59, 0.04);
+}
+.project-note-section-delete-choice-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.project-note-section-delete-choice-copy strong {
+  color: var(--text);
+  font: 650 13px/1.2 var(--font-sans);
+}
+.project-note-section-delete-choice-copy span {
+  color: var(--text2);
+  font: 400 12px/1.5 var(--font-sans);
+}
+.project-note-section-delete-choice .field-group { margin: 0; }
+.project-note-section-move-btn,
+.project-note-section-delete-all-btn {
+  align-self: flex-start;
+  min-height: 38px;
+  padding: 0 14px;
+  border: 1px solid var(--border2);
+  border-radius: 11px;
+  background: var(--bg);
+  color: var(--text);
+  font: 600 12px/1 var(--font-sans);
+  cursor: pointer;
+  transition: background var(--t-fast), border-color var(--t-fast), color var(--t-fast);
+}
+.project-note-section-move-btn:hover {
+  border-color: var(--accent);
+  background: var(--accent-dim);
+  color: var(--accent-text);
+}
+.project-note-section-delete-all-btn {
+  border-color: rgba(217, 59, 59, 0.34);
+  background: rgba(217, 59, 59, 0.07);
+  color: var(--red);
+}
+.project-note-section-delete-all-btn:hover {
+  border-color: rgba(217, 59, 59, 0.5);
+  background: rgba(217, 59, 59, 0.13);
+}
+.project-note-section-move-btn:disabled,
+.project-note-section-delete-all-btn:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
 @keyframes project-note-in {
   from { opacity: 0; transform: translateY(5px); }
   to { opacity: 1; transform: translateY(0); }
@@ -4160,6 +4229,9 @@ button[id$="-delete-btn"]:hover {
   .project-note-column .project-note-card { min-height: 112px; }
   .project-note-add-column { flex-basis: min(68vw, 220px); }
   .project-note-modal #project-note-body { min-height: 240px; }
+  .project-note-section-delete-choice { padding: 13px; }
+  .project-note-section-move-btn,
+  .project-note-section-delete-all-btn { align-self: stretch; }
 
   .settings-form-grid {
     grid-template-columns: 1fr;

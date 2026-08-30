@@ -3,6 +3,7 @@ import { prisma } from '../../db/client.js';
 import type {
   CreateProjectNoteInput,
   CreateProjectNoteSectionInput,
+  DeleteProjectNoteSectionInput,
   ReorderProjectNotesInput,
   UpdateProjectNoteInput,
   UpdateProjectNoteSectionInput,
@@ -164,18 +165,74 @@ export async function updateProjectNoteSection(
   });
 }
 
-export async function deleteProjectNoteSection(userId: string, workspaceId: string, sectionId: string) {
+export async function deleteProjectNoteSection(
+  userId: string,
+  workspaceId: string,
+  sectionId: string,
+  input: DeleteProjectNoteSectionInput,
+) {
   await requireWorkspaceMutationAccess(userId, workspaceId);
 
   const section = await prisma.projectNoteSection.findFirst({
     where: { id: sectionId, workspaceId, project: { archivedAt: null } },
-    select: { id: true, _count: { select: { notes: true } } },
+    select: { id: true, projectId: true },
   });
   if (!section) throw new Error('PROJECT_NOTE_SECTION_NOT_FOUND');
-  if (section._count.notes > 0) throw new Error('PROJECT_NOTE_SECTION_NOT_EMPTY');
 
-  await prisma.projectNoteSection.delete({ where: { id: sectionId } });
-  return { id: sectionId };
+  return prisma.$transaction(async tx => {
+    const notes = await tx.projectNote.findMany({
+      where: { workspaceId, projectId: section.projectId, sectionId },
+      orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
+      select: { id: true },
+    });
+
+    if (input.mode === 'move') {
+      if (input.targetSectionId === sectionId) {
+        throw new Error('PROJECT_NOTE_SECTION_MOVE_TO_SELF');
+      }
+
+      const targetSection = await tx.projectNoteSection.findFirst({
+        where: {
+          id: input.targetSectionId,
+          workspaceId,
+          projectId: section.projectId,
+        },
+        select: { id: true },
+      });
+      if (!targetSection) throw new Error('PROJECT_NOTE_TARGET_SECTION_NOT_FOUND');
+
+      const lastTargetNote = await tx.projectNote.findFirst({
+        where: {
+          workspaceId,
+          projectId: section.projectId,
+          sectionId: targetSection.id,
+        },
+        orderBy: { sortOrder: 'desc' },
+        select: { sortOrder: true },
+      });
+      const firstSortOrder = (lastTargetNote?.sortOrder ?? -1) + 1;
+
+      await Promise.all(notes.map((note, index) => tx.projectNote.update({
+        where: { id: note.id },
+        data: {
+          sectionId: targetSection.id,
+          sortOrder: firstSortOrder + index,
+        },
+      })));
+    } else {
+      await tx.projectNote.deleteMany({
+        where: { workspaceId, projectId: section.projectId, sectionId },
+      });
+    }
+
+    await tx.projectNoteSection.delete({ where: { id: sectionId } });
+    return {
+      id: sectionId,
+      mode: input.mode,
+      affectedNotes: notes.length,
+      targetSectionId: input.mode === 'move' ? input.targetSectionId : null,
+    };
+  });
 }
 
 export async function createProjectNote(

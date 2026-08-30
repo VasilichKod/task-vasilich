@@ -26,6 +26,16 @@ export const updateProjectNoteSectionSchema = z.object({
   name: z.string().trim().min(1).max(120),
 });
 
+export const deleteProjectNoteSectionSchema = z.discriminatedUnion('mode', [
+  z.object({
+    mode: z.literal('move'),
+    targetSectionId: z.string().trim().min(1),
+  }),
+  z.object({
+    mode: z.literal('delete'),
+  }),
+]);
+
 const orderedIdListSchema = z.array(z.string().trim().min(1)).max(200).refine(
   ids => new Set(ids).size === ids.length,
   { message: 'IDs must be unique' },
@@ -46,4 +56,5 @@ export type CreateProjectNoteInput = z.infer<typeof createProjectNoteSchema>;
 export type UpdateProjectNoteInput = z.infer<typeof updateProjectNoteSchema>;
 export type CreateProjectNoteSectionInput = z.infer<typeof createProjectNoteSectionSchema>;
 export type UpdateProjectNoteSectionInput = z.infer<typeof updateProjectNoteSectionSchema>;
+export type DeleteProjectNoteSectionInput = z.infer<typeof deleteProjectNoteSectionSchema>;
 export type ReorderProjectNotesInput = z.infer<typeof reorderProjectNotesSchema>;

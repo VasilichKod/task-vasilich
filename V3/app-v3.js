@@ -3917,6 +3917,46 @@ function setProjectNoteSectionError(message = '') {
   node.style.display = message ? 'block' : 'none';
 }
 
+function setProjectNoteSectionDeleteError(message = '') {
+  const node = document.getElementById('project-note-section-delete-error');
+  node.textContent = message;
+  node.style.display = message ? 'block' : 'none';
+}
+
+function showProjectNoteSectionEditView() {
+  const section = manageProjectNoteSectionId && activeProjectId
+    ? (projectNoteSectionsByProject[activeProjectId] || []).find(item => item.id === manageProjectNoteSectionId)
+    : null;
+  document.getElementById('project-note-section-edit-view').style.display = 'block';
+  document.getElementById('project-note-section-delete-view').style.display = 'none';
+  document.getElementById('project-note-section-modal-title').textContent = section ? 'Настройки раздела' : 'Новый раздел';
+  setProjectNoteSectionDeleteError('');
+}
+
+function showProjectNoteSectionDeleteView() {
+  if (!activeProjectId || !manageProjectNoteSectionId) return;
+  const projectId = activeProjectId;
+  const sectionId = manageProjectNoteSectionId;
+  const sections = projectNoteSectionsByProject[projectId] || [];
+  const section = sections.find(item => item.id === sectionId);
+  const noteCount = (projectNotesByProject[projectId] || []).filter(note => note.sectionId === sectionId).length;
+  const targetSections = sections.filter(item => item.id !== sectionId);
+
+  document.getElementById('project-note-section-edit-view').style.display = 'none';
+  document.getElementById('project-note-section-delete-view').style.display = 'flex';
+  document.getElementById('project-note-section-modal-title').textContent = 'Удалить раздел?';
+  document.getElementById('project-note-section-delete-intro').textContent =
+    `В разделе «${section?.name || 'Без названия'}» ${noteCount} ${pluralizeRu(noteCount, 'карточка', 'карточки', 'карточек')}. Выбери, что с ними сделать.`;
+
+  const moveChoice = document.getElementById('project-note-section-move-choice');
+  moveChoice.style.display = targetSections.length ? 'flex' : 'none';
+  document.getElementById('project-note-section-move-target').innerHTML = targetSections
+    .map(item => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.name)}</option>`)
+    .join('');
+  setProjectNoteSectionError('');
+  setProjectNoteSectionDeleteError('');
+}
+
 function openProjectNoteSectionModal(sectionId = null) {
   if (!activeProjectId) return;
   const section = sectionId
@@ -3929,6 +3969,7 @@ function openProjectNoteSectionModal(sectionId = null) {
   document.getElementById('project-note-section-name').value = section?.name || '';
   document.getElementById('project-note-section-delete-btn').style.display = section ? 'inline-flex' : 'none';
   document.getElementById('project-note-section-save-btn').textContent = section ? 'Сохранить' : 'Создать';
+  showProjectNoteSectionEditView();
   setProjectNoteSectionError('');
   document.getElementById('project-note-section-modal').classList.add('open');
   setTimeout(() => document.getElementById('project-note-section-name')?.focus(), 20);
@@ -3938,6 +3979,7 @@ function closeProjectNoteSectionModal() {
   document.getElementById('project-note-section-modal').classList.remove('open');
   manageProjectNoteSectionId = null;
   setProjectNoteSectionError('');
+  setProjectNoteSectionDeleteError('');
 }
 
 async function saveProjectNoteSection() {
@@ -3995,7 +4037,7 @@ function deleteProjectNoteSection() {
   const noteCount = (projectNotesByProject[projectId] || []).filter(note => note.sectionId === sectionId).length;
 
   if (noteCount > 0) {
-    setProjectNoteSectionError('Сначала перенеси или удали заметки из этого раздела.');
+    showProjectNoteSectionDeleteView();
     return;
   }
 
@@ -4005,28 +4047,94 @@ function deleteProjectNoteSection() {
     confirmText: 'Удалить',
     danger: true,
     onConfirm: async () => {
-      try {
-        await apiJson(`/api/project-note-sections/${encodeURIComponent(sectionId)}`, {
-          method: 'DELETE',
-          headers: {},
-        });
-        projectNoteSectionsByProject[projectId] = (projectNoteSectionsByProject[projectId] || [])
-          .filter(item => item.id !== sectionId);
-        closeProjectNoteSectionModal();
-        if (state.currentView === 'project' && activeProjectId === projectId) {
-          renderProjectWorkspaceView();
-        }
-        showToast('Раздел удалён');
-      } catch (error) {
-        console.error(error);
-        setProjectNoteSectionError(
-          error instanceof Error && error.message === 'PROJECT_NOTE_SECTION_NOT_EMPTY'
-            ? 'Сначала перенеси или удали заметки из этого раздела.'
-            : 'Не удалось удалить раздел.',
-        );
-      }
+      await performProjectNoteSectionDeletion({ mode: 'delete' });
     },
   });
+}
+
+function moveNotesAndDeleteProjectNoteSection() {
+  if (!activeProjectId || !manageProjectNoteSectionId) return;
+  const targetSectionId = document.getElementById('project-note-section-move-target').value;
+  if (!targetSectionId) {
+    setProjectNoteSectionDeleteError('Выбери раздел, куда перенести карточки.');
+    return;
+  }
+  void performProjectNoteSectionDeletion({ mode: 'move', targetSectionId });
+}
+
+function confirmDeleteProjectNoteSectionWithNotes() {
+  if (!activeProjectId || !manageProjectNoteSectionId) return;
+  const projectId = activeProjectId;
+  const sectionId = manageProjectNoteSectionId;
+  const section = (projectNoteSectionsByProject[projectId] || []).find(item => item.id === sectionId);
+  const noteCount = (projectNotesByProject[projectId] || []).filter(note => note.sectionId === sectionId).length;
+
+  openConfirmModal({
+    title: 'Удалить всё безвозвратно?',
+    message: `Раздел «${section?.name || 'Без названия'}» и все карточки внутри (${noteCount}) будут удалены. Это действие нельзя отменить.`,
+    confirmText: `Удалить всё (${noteCount})`,
+    danger: true,
+    onConfirm: async () => {
+      await performProjectNoteSectionDeletion({ mode: 'delete' });
+    },
+  });
+}
+
+async function performProjectNoteSectionDeletion(input) {
+  if (!activeProjectId || !manageProjectNoteSectionId) return;
+  const projectId = activeProjectId;
+  const sectionId = manageProjectNoteSectionId;
+  const notes = projectNotesByProject[projectId] || [];
+  const sourceNotes = notes
+    .filter(note => note.sectionId === sectionId)
+    .sort((left, right) => left.sortOrder - right.sortOrder);
+  const moveButton = document.getElementById('project-note-section-move-btn');
+  const deleteButton = document.getElementById('project-note-section-delete-all-btn');
+  moveButton.disabled = true;
+  deleteButton.disabled = true;
+  setProjectNoteSectionDeleteError('');
+
+  try {
+    await apiJson(`/api/project-note-sections/${encodeURIComponent(sectionId)}`, {
+      method: 'DELETE',
+      body: JSON.stringify(input),
+    });
+
+    if (input.mode === 'move') {
+      const targetNotes = notes.filter(note => note.sectionId === input.targetSectionId);
+      const firstSortOrder = targetNotes.reduce((max, note) => Math.max(max, note.sortOrder), -1) + 1;
+      const movedOrder = new Map(sourceNotes.map((note, index) => [note.id, firstSortOrder + index]));
+      projectNotesByProject[projectId] = notes.map(note => movedOrder.has(note.id)
+        ? { ...note, sectionId: input.targetSectionId, sortOrder: movedOrder.get(note.id) }
+        : note);
+    } else {
+      projectNotesByProject[projectId] = notes.filter(note => note.sectionId !== sectionId);
+    }
+    projectNoteSectionsByProject[projectId] = (projectNoteSectionsByProject[projectId] || [])
+      .filter(item => item.id !== sectionId);
+
+    closeProjectNoteSectionModal();
+    void markProjectActivity(projectId, 'WORK');
+    if (state.currentView === 'project' && activeProjectId === projectId) {
+      renderProjectWorkspaceView();
+    }
+    showToast(input.mode === 'move'
+      ? `${sourceNotes.length} ${pluralizeRu(sourceNotes.length, 'карточка перенесена', 'карточки перенесены', 'карточек перенесено')}, раздел удалён`
+      : 'Раздел и карточки удалены');
+  } catch (error) {
+    console.error(error);
+    const message = error instanceof Error && error.message === 'PROJECT_NOTE_TARGET_SECTION_NOT_FOUND'
+      ? 'Раздел для переноса больше не существует. Обнови страницу и попробуй ещё раз.'
+      : 'Не удалось удалить раздел. Попробуй ещё раз.';
+    if (document.getElementById('project-note-section-delete-view').style.display !== 'none') {
+      setProjectNoteSectionDeleteError(message);
+    } else {
+      setProjectNoteSectionError(message);
+    }
+  } finally {
+    moveButton.disabled = false;
+    deleteButton.disabled = false;
+  }
 }
 
 function getAchievementYears() {

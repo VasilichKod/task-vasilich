@@ -14,6 +14,7 @@ import {
 import {
   createProjectNoteSchema,
   createProjectNoteSectionSchema,
+  deleteProjectNoteSectionSchema,
   projectNoteIdSchema,
   reorderProjectNotesSchema,
   updateProjectNoteSectionSchema,
@@ -96,7 +97,9 @@ export async function handleDeleteProjectNoteSectionRequest(request: Request, se
   try {
     const session = await getAuthorizedSession(request);
     const params = projectNoteIdSchema.parse({ id: sectionId });
-    const data = await deleteProjectNoteSection(session.userId, session.workspaceId, params.id);
+    const rawBody = await request.text();
+    const body = deleteProjectNoteSectionSchema.parse(rawBody ? JSON.parse(rawBody) : { mode: 'delete' });
+    const data = await deleteProjectNoteSection(session.userId, session.workspaceId, params.id, body);
     return json({ ok: true, data });
   } catch (error) {
     return handleProjectNotesError(error, 'DELETE_PROJECT_NOTE_SECTION_FAILED');
@@ -145,7 +148,11 @@ function handleProjectNotesError(error: unknown, fallbackCode: string) {
     ) {
       return json({ ok: false, error: error.message }, 404);
     }
-    if (error.message === 'PROJECT_NOTE_SECTION_NOT_EMPTY') {
+    if (
+      error.message === 'PROJECT_NOTE_SECTION_NOT_EMPTY'
+      || error.message === 'PROJECT_NOTE_SECTION_MOVE_TO_SELF'
+      || error.message === 'PROJECT_NOTE_TARGET_SECTION_NOT_FOUND'
+    ) {
       return json({ ok: false, error: error.message }, 409);
     }
     if (error.message === 'PROJECT_NOTE_ORDER_CONFLICT') {
