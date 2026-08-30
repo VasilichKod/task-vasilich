@@ -123,6 +123,21 @@ let _lastAchievementsSyncSignature = '';
 let _isApplyingServerAchievements = false;
 let _hasPersistedLocalWorkspace = false;
 let _graphTouchPan = null;
+let asanaImportState = {
+  exportData: null,
+  preview: null,
+  fileName: '',
+  targetValue: '__new__',
+  groupId: '',
+  projectName: '',
+  color: COLORS[4],
+  includeCompleted: true,
+  includeSourceLinks: true,
+  conflictMode: 'skip',
+  loading: false,
+  error: '',
+  result: null,
+};
 
 const LEGACY_STORAGE_KEY = 'wpv3';
 const NAVIGABLE_VIEWS = new Set([
@@ -4307,7 +4322,8 @@ function renderSettingsView() {
           </div>
           <div class="settings-actions-row">
             <button type="button" onclick="exportAllData()">Экспорт JSON</button>
-            <button type="button" onclick="triggerImportData()">Импорт JSON</button>
+            <button type="button" onclick="triggerImportData()">Импорт копии</button>
+            <button class="settings-asana-button" type="button" onclick="openAsanaImport()">Asana → НеПлан</button>
           </div>
           <input id="settings-import-input" type="file" accept="application/json,.json" style="display:none" onchange="importAllDataFromFile(event)" />
         </section>
@@ -4549,6 +4565,302 @@ function exportAllData() {
 
 function triggerImportData() {
   document.getElementById('settings-import-input')?.click();
+}
+
+function resetAsanaImportState() {
+  asanaImportState = {
+    exportData: null,
+    preview: null,
+    fileName: '',
+    targetValue: '__new__',
+    groupId: state.groups[0]?.id || '',
+    projectName: '',
+    color: COLORS[4],
+    includeCompleted: true,
+    includeSourceLinks: true,
+    conflictMode: 'skip',
+    loading: false,
+    error: '',
+    result: null,
+  };
+}
+
+function openAsanaImport() {
+  resetAsanaImportState();
+  renderAsanaImportModal();
+  document.getElementById('asana-import-modal')?.classList.add('open');
+}
+
+function closeAsanaImport() {
+  if (asanaImportState.loading) return;
+  document.getElementById('asana-import-modal')?.classList.remove('open');
+}
+
+function getAsanaImportErrorMessage(code) {
+  const messages = {
+    INVALID_ASANA_JSON: 'Файл не является корректным JSON.',
+    INVALID_ASANA_EXPORT: 'В JSON не найден экспорт задач Asana.',
+    ASANA_PROJECT_NOT_FOUND: 'Не удалось определить проект Asana.',
+    ASANA_EXPORT_TOO_LARGE: 'В этом файле слишком много задач для одного импорта.',
+    PROJECT_NOT_FOUND: 'Выбранный проект больше недоступен.',
+    GROUP_NOT_FOUND: 'Выбранная группа больше недоступна.',
+  };
+  return messages[code] || 'Не удалось обработать экспорт Asana.';
+}
+
+function triggerAsanaImportFile() {
+  if (asanaImportState.loading) return;
+  document.getElementById('asana-import-file')?.click();
+}
+
+function allowAsanaFileDrop(event) {
+  event.preventDefault();
+  event.currentTarget.classList.add('is-dragover');
+}
+
+function leaveAsanaFileDrop(event) {
+  if (event.currentTarget.contains(event.relatedTarget)) return;
+  event.currentTarget.classList.remove('is-dragover');
+}
+
+function dropAsanaImportFile(event) {
+  event.preventDefault();
+  event.currentTarget.classList.remove('is-dragover');
+  const file = event.dataTransfer?.files?.[0];
+  if (file) void loadAsanaImportFile(file);
+}
+
+async function handleAsanaImportFile(event) {
+  const file = event.target.files?.[0];
+  event.target.value = '';
+  if (file) await loadAsanaImportFile(file);
+}
+
+async function loadAsanaImportFile(file) {
+  if (asanaImportState.loading) return;
+  if (file.size > 15 * 1024 * 1024) {
+    asanaImportState.error = 'Файл больше 15 МБ. Раздели экспорт на несколько файлов.';
+    renderAsanaImportModal();
+    return;
+  }
+
+  asanaImportState.loading = true;
+  asanaImportState.error = '';
+  asanaImportState.result = null;
+  asanaImportState.fileName = file.name;
+  renderAsanaImportModal();
+
+  try {
+    const exportData = JSON.parse(await file.text());
+    const preview = await apiJson('/api/imports/asana/preview', {
+      method: 'POST',
+      body: JSON.stringify({ exportData }),
+    });
+    const matchingProject = state.subs.find(project =>
+      project.label.trim().toLocaleLowerCase('ru-RU') === preview.projectName.trim().toLocaleLowerCase('ru-RU')
+    );
+    asanaImportState.exportData = exportData;
+    asanaImportState.preview = preview;
+    asanaImportState.projectName = preview.projectName;
+    asanaImportState.targetValue = matchingProject?.id || '__new__';
+    asanaImportState.groupId = matchingProject?.group || state.groups[0]?.id || '';
+    asanaImportState.color = matchingProject?.color || COLORS[4];
+  } catch (error) {
+    console.error(error);
+    const code = error instanceof SyntaxError
+      ? 'INVALID_ASANA_JSON'
+      : (error instanceof Error ? error.message : 'ASANA_PREVIEW_FAILED');
+    asanaImportState.exportData = null;
+    asanaImportState.preview = null;
+    asanaImportState.error = getAsanaImportErrorMessage(code);
+  } finally {
+    asanaImportState.loading = false;
+    renderAsanaImportModal();
+  }
+}
+
+function updateAsanaImportOption(key, value) {
+  if (!(key in asanaImportState)) return;
+  asanaImportState[key] = value;
+  if (key === 'targetValue' || key === 'includeCompleted') renderAsanaImportModal();
+}
+
+function renderAsanaImportModal() {
+  const root = document.getElementById('asana-import-content');
+  if (!root) return;
+
+  if (asanaImportState.result) {
+    const result = asanaImportState.result;
+    root.innerHTML = `
+      <div class="asana-import-success">
+        <span class="asana-import-success-mark" aria-hidden="true">✓</span>
+        <div class="asana-import-kicker">Импорт завершён</div>
+        <h3>${escapeHtml(result.project.name)}</h3>
+        <p>Секции Asana стали столбиками, задачи — карточками, а подзадачи и описания сохранены внутри карточек.</p>
+        <div class="asana-import-result-grid">
+          <span><strong>${result.createdSectionCount}</strong><small>новых столбиков</small></span>
+          <span><strong>${result.createdTaskCount}</strong><small>новых карточек</small></span>
+          <span><strong>${result.updatedTaskCount}</strong><small>обновлено</small></span>
+          <span><strong>${result.skippedTaskCount}</strong><small>дублей пропущено</small></span>
+        </div>
+        <div class="modal-actions modal-actions-right">
+          <button type="button" onclick="closeAsanaImport()">Закрыть</button>
+          <button class="primary" type="button" onclick="openImportedAsanaProject()">Открыть проект</button>
+        </div>
+      </div>`;
+    return;
+  }
+
+  if (!asanaImportState.preview) {
+    root.innerHTML = `
+      <button
+        class="asana-import-dropzone${asanaImportState.loading ? ' is-loading' : ''}"
+        type="button"
+        onclick="triggerAsanaImportFile()"
+        ondragover="allowAsanaFileDrop(event)"
+        ondragleave="leaveAsanaFileDrop(event)"
+        ondrop="dropAsanaImportFile(event)"
+        ${asanaImportState.loading ? 'disabled' : ''}
+      >
+        <span class="asana-import-logo" aria-hidden="true"><i></i><i></i><i></i></span>
+        <strong>${asanaImportState.loading ? 'Разбираю файл…' : 'Выбрать JSON из Asana'}</strong>
+        <span>${asanaImportState.fileName ? escapeHtml(asanaImportState.fileName) : 'Или перетащи файл сюда'}</span>
+      </button>
+      ${asanaImportState.error ? `<div class="asana-import-error">${escapeHtml(asanaImportState.error)}</div>` : ''}
+      <div class="asana-import-privacy">
+        <strong>Важно</strong>
+        <span>Описания и подзадачи перенесутся целиком. Если в Asana хранятся пароли или доступы, они тоже попадут в твой аккаунт «НеПлана».</span>
+      </div>`;
+    return;
+  }
+
+  const preview = asanaImportState.preview;
+  const isNewProject = asanaImportState.targetValue === '__new__';
+  root.innerHTML = `
+    <div class="asana-import-layout">
+      <section class="asana-import-preview">
+        <div class="asana-import-fileline">
+          <span class="asana-import-logo compact" aria-hidden="true"><i></i><i></i><i></i></span>
+          <div><strong>${escapeHtml(preview.projectName)}</strong><small>${escapeHtml(asanaImportState.fileName)}</small></div>
+          <button type="button" onclick="triggerAsanaImportFile()">Заменить</button>
+        </div>
+        <div class="asana-import-metrics">
+          <span><strong>${preview.sectionCount}</strong><small>секций</small></span>
+          <span><strong>${preview.taskCount}</strong><small>задач</small></span>
+          <span><strong>${preview.subtaskCount}</strong><small>подзадач</small></span>
+          <span><strong>${preview.completedTaskCount}</strong><small>выполнено</small></span>
+        </div>
+        <div class="asana-import-section-list">
+          ${preview.sections.map(section => `
+            <div><span>${escapeHtml(section.name)}</span><b>${section.taskCount}</b></div>
+          `).join('')}
+        </div>
+      </section>
+
+      <section class="asana-import-options">
+        <div class="asana-import-kicker">Куда перенести</div>
+        <label class="field-group">
+          <span class="form-label">Проект в «НеПлане»</span>
+          <select onchange="updateAsanaImportOption('targetValue', this.value)">
+            <option value="__new__"${isNewProject ? ' selected' : ''}>+ Создать новый проект</option>
+            ${state.subs.map(project => `<option value="${escapeHtml(project.id)}"${asanaImportState.targetValue === project.id ? ' selected' : ''}>${escapeHtml(project.label)} · ${escapeHtml(getGroup(project.group)?.label || 'Без группы')}</option>`).join('')}
+          </select>
+        </label>
+        ${isNewProject ? `
+          <div class="asana-import-new-project">
+            <label class="field-group">
+              <span class="form-label">Название</span>
+              <input maxlength="120" value="${escapeHtml(asanaImportState.projectName)}" oninput="updateAsanaImportOption('projectName', this.value)" />
+            </label>
+            <label class="field-group">
+              <span class="form-label">Группа</span>
+              <select onchange="updateAsanaImportOption('groupId', this.value)">
+                ${state.groups.map(group => `<option value="${escapeHtml(group.id)}"${asanaImportState.groupId === group.id ? ' selected' : ''}>${escapeHtml(group.label)}</option>`).join('')}
+              </select>
+            </label>
+            <label class="field-group asana-import-color-field">
+              <span class="form-label">Цвет</span>
+              <input type="color" value="${escapeHtml(asanaImportState.color)}" oninput="updateAsanaImportOption('color', this.value)" />
+            </label>
+          </div>` : ''}
+        <div class="asana-import-kicker asana-import-options-title">Что сохранить</div>
+        <label class="settings-check">
+          <span><strong>Выполненные задачи</strong><small>${preview.completedTaskCount} шт. будут помечены в описании</small></span>
+          <input type="checkbox" ${asanaImportState.includeCompleted ? 'checked' : ''} onchange="updateAsanaImportOption('includeCompleted', this.checked)" />
+        </label>
+        <label class="settings-check">
+          <span><strong>Ссылки на Asana</strong><small>Добавить исходную ссылку в каждую карточку</small></span>
+          <input type="checkbox" ${asanaImportState.includeSourceLinks ? 'checked' : ''} onchange="updateAsanaImportOption('includeSourceLinks', this.checked)" />
+        </label>
+        <label class="field-group asana-import-conflicts">
+          <span class="form-label">Если файл импортировали раньше</span>
+          <select onchange="updateAsanaImportOption('conflictMode', this.value)">
+            <option value="skip"${asanaImportState.conflictMode === 'skip' ? ' selected' : ''}>Не трогать уже перенесённые</option>
+            <option value="update"${asanaImportState.conflictMode === 'update' ? ' selected' : ''}>Обновить их из файла Asana</option>
+          </select>
+        </label>
+        ${asanaImportState.error ? `<div class="asana-import-error">${escapeHtml(asanaImportState.error)}</div>` : ''}
+        <div class="modal-actions modal-actions-right">
+          <button type="button" onclick="closeAsanaImport()">Отмена</button>
+          <button class="primary" id="asana-import-submit" type="button" onclick="runAsanaImport()" ${asanaImportState.loading ? 'disabled' : ''}>${asanaImportState.loading ? 'Переносим…' : `Перенести ${asanaImportState.includeCompleted ? preview.taskCount : preview.openTaskCount} задач`}</button>
+        </div>
+      </section>
+    </div>`;
+}
+
+async function runAsanaImport() {
+  if (!asanaImportState.exportData || !asanaImportState.preview || asanaImportState.loading) return;
+  const isNewProject = asanaImportState.targetValue === '__new__';
+  const projectName = asanaImportState.projectName.trim();
+  if (isNewProject && (!projectName || !asanaImportState.groupId)) {
+    asanaImportState.error = 'Укажи название и группу нового проекта.';
+    renderAsanaImportModal();
+    return;
+  }
+
+  asanaImportState.loading = true;
+  asanaImportState.error = '';
+  renderAsanaImportModal();
+  try {
+    const target = isNewProject
+      ? {
+        mode: 'new',
+        groupId: asanaImportState.groupId,
+        name: projectName,
+        color: asanaImportState.color,
+      }
+      : { mode: 'existing', projectId: asanaImportState.targetValue };
+    const result = await apiJson('/api/imports/asana', {
+      method: 'POST',
+      body: JSON.stringify({
+        exportData: asanaImportState.exportData,
+        target,
+        includeCompleted: asanaImportState.includeCompleted,
+        includeSourceLinks: asanaImportState.includeSourceLinks,
+        conflictMode: asanaImportState.conflictMode,
+      }),
+    });
+    await syncCatalogFromServer();
+    delete projectNotesByProject[result.project.id];
+    delete projectNoteSectionsByProject[result.project.id];
+    asanaImportState.result = result;
+    renderSidebarLists();
+    renderSettingsView();
+  } catch (error) {
+    console.error(error);
+    asanaImportState.error = getAsanaImportErrorMessage(error instanceof Error ? error.message : 'ASANA_IMPORT_FAILED');
+  } finally {
+    asanaImportState.loading = false;
+    renderAsanaImportModal();
+  }
+}
+
+function openImportedAsanaProject() {
+  const projectId = asanaImportState.result?.project?.id;
+  if (!projectId) return;
+  asanaImportState.loading = false;
+  closeAsanaImport();
+  openProjectWorkspace(projectId);
 }
 
 async function importAllDataFromFile(event) {
@@ -6262,6 +6574,7 @@ function handleModalBackdrop(event, type) {
   if (type === 'project-template') closeProjectTemplateManage();
   if (type === 'manage') closeManage();
   if (type === 'group') closeGroupManage();
+  if (type === 'asana-import') closeAsanaImport();
   if (type === 'recurring') closeRecurringManage();
   if (type === 'achievement') closeAchievementModal();
   if (type === 'wish-item') closeWishItemModal();

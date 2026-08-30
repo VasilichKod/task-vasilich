@@ -208,37 +208,43 @@ model WishItem {
 }
 
 model ProjectNote {
-  id          String   @id @default(cuid())
-  workspaceId String   @map("workspace_id")
-  projectId   String   @map("project_id")
-  sectionId   String?  @map("section_id")
-  title       String
-  body        String   @default("")
-  sortOrder   Int      @default(0) @map("sort_order")
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  id           String   @id @default(cuid())
+  workspaceId  String   @map("workspace_id")
+  projectId    String   @map("project_id")
+  sectionId    String?  @map("section_id")
+  sourceSystem String?  @map("source_system")
+  sourceId     String?  @map("source_id")
+  title        String
+  body         String   @default("")
+  sortOrder    Int      @default(0) @map("sort_order")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
 
   workspace Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   project   Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
   section   ProjectNoteSection? @relation(fields: [sectionId], references: [id], onDelete: SetNull)
 
+  @@unique([workspaceId, projectId, sourceSystem, sourceId], map: "project_notes_source_key")
   @@index([workspaceId, projectId, sectionId, sortOrder])
   @@map("project_notes")
 }
 
 model ProjectNoteSection {
-  id          String   @id @default(cuid())
-  workspaceId String   @map("workspace_id")
-  projectId   String   @map("project_id")
-  name        String
-  sortOrder   Int      @default(0) @map("sort_order")
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  id           String   @id @default(cuid())
+  workspaceId  String   @map("workspace_id")
+  projectId    String   @map("project_id")
+  sourceSystem String?  @map("source_system")
+  sourceId     String?  @map("source_id")
+  name         String
+  sortOrder    Int      @default(0) @map("sort_order")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
 
   workspace Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   project   Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
   notes     ProjectNote[]
 
+  @@unique([workspaceId, projectId, sourceSystem, sourceId], map: "project_note_sections_source_key")
   @@index([workspaceId, projectId, sortOrder])
   @@map("project_note_sections")
 }

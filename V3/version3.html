@@ -487,6 +487,23 @@
     </div>
   </div>
 
+  <!-- Asana import modal -->
+  <div class="modal-bg" id="asana-import-modal" onclick="handleModalBackdrop(event, 'asana-import')">
+    <div class="modal modal-xl asana-import-modal">
+      <div class="modal-header">
+        <div>
+          <div class="modal-title">Импорт из Asana</div>
+          <div class="modal-copy">Проект, секции, задачи, описания и подзадачи</div>
+        </div>
+        <button class="modal-close" type="button" onclick="closeAsanaImport()" aria-label="Закрыть">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <input id="asana-import-file" type="file" accept="application/json,.json,text/plain,.txt" hidden onchange="handleAsanaImportFile(event)" />
+      <div id="asana-import-content"></div>
+    </div>
+  </div>
+
   <!-- Recurring modal -->
   <div class="modal-bg" id="recurring-modal" onclick="handleModalBackdrop(event, 'recurring')">
     <div class="modal modal-xl">

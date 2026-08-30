@@ -12,6 +12,10 @@ import {
 import { handleSaveAchievementsStateRequest } from '../api/achievements/index.js';
 import { handleSavePlanningStateRequest } from '../api/planning/index.js';
 import {
+  handleImportAsanaProjectRequest,
+  handlePreviewAsanaImportRequest,
+} from '../api/imports/asana/index.js';
+import {
   handleCreateWishItemRequest,
   handleCreateWishListRequest,
   handleDeleteWishItemRequest,
@@ -215,6 +219,14 @@ async function route(request: Request) {
 
   if (request.method === 'PATCH' && url.pathname === '/api/achievements-state') {
     return withCors(request, await handleSaveAchievementsStateRequest(request));
+  }
+
+  if (request.method === 'POST' && url.pathname === '/api/imports/asana/preview') {
+    return withCors(request, await handlePreviewAsanaImportRequest(request));
+  }
+
+  if (request.method === 'POST' && url.pathname === '/api/imports/asana') {
+    return withCors(request, await handleImportAsanaProjectRequest(request));
   }
 
   if (request.method === 'GET' && url.pathname === '/api/wishlist') {

@@ -1823,6 +1823,278 @@ select option { background: var(--bg3); color: var(--text); }
   font-style: normal;
 }
 
+/* ─── ASANA IMPORT ────────────────────────────────────── */
+.asana-import-modal {
+  width: min(1040px, calc(100vw - 24px));
+  gap: 18px;
+}
+.asana-import-modal .modal-header > div:first-child {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.asana-import-dropzone {
+  display: flex;
+  width: 100%;
+  min-height: 300px;
+  height: auto;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 11px;
+  border: 1px dashed var(--border2);
+  border-radius: 16px;
+  background: var(--bg2);
+  color: var(--text2);
+  text-align: center;
+}
+.asana-import-dropzone strong {
+  color: var(--text);
+  font: 650 17px/1.25 var(--font-sans);
+}
+.asana-import-dropzone > span:last-child {
+  color: var(--text3);
+  font: 400 12px/1.4 var(--font-sans);
+}
+.asana-import-dropzone:hover,
+.asana-import-dropzone.is-dragover {
+  border-color: var(--border3);
+  background: var(--surface2);
+}
+.asana-import-dropzone.is-loading { cursor: progress; }
+.asana-import-logo {
+  position: relative;
+  display: block;
+  width: 56px;
+  height: 40px;
+  margin-bottom: 7px;
+}
+.asana-import-logo i {
+  position: absolute;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #f06a6a;
+}
+.asana-import-logo i:first-child { top: 0; left: 17px; }
+.asana-import-logo i:nth-child(2) { bottom: 0; left: 0; }
+.asana-import-logo i:nth-child(3) { right: 0; bottom: 0; }
+.asana-import-logo.compact {
+  flex: 0 0 34px;
+  width: 34px;
+  height: 25px;
+  margin: 0;
+}
+.asana-import-logo.compact i { width: 14px; height: 14px; }
+.asana-import-logo.compact i:first-child { left: 10px; }
+.asana-import-privacy {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  margin-top: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface2);
+  color: var(--text2);
+  font: 400 11px/1.55 var(--font-sans);
+}
+.asana-import-privacy strong { color: var(--text); }
+.asana-import-error {
+  padding: 11px 13px;
+  border: 1px solid rgba(217, 59, 59, 0.25);
+  border-radius: 10px;
+  background: var(--red-dim);
+  color: var(--red);
+  font: 500 12px/1.45 var(--font-sans);
+}
+.asana-import-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 0.86fr) minmax(360px, 1.14fr);
+  min-height: 520px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+}
+.asana-import-preview,
+.asana-import-options {
+  min-width: 0;
+  padding: 18px;
+}
+.asana-import-preview {
+  background: var(--bg2);
+  border-right: 1px solid var(--border);
+}
+.asana-import-options {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: var(--surface);
+}
+.asana-import-fileline {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 11px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
+.asana-import-fileline > div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+}
+.asana-import-fileline strong {
+  overflow: hidden;
+  color: var(--text);
+  font: 650 15px/1.25 var(--font-sans);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.asana-import-fileline small {
+  overflow: hidden;
+  color: var(--text3);
+  font: 400 10px/1.2 var(--font-mono);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.asana-import-fileline button {
+  min-height: 30px;
+  padding: 0 9px;
+  font-size: 11px;
+}
+.asana-import-metrics,
+.asana-import-result-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1px;
+  margin: 14px 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--border);
+}
+.asana-import-metrics > span,
+.asana-import-result-grid > span {
+  display: flex;
+  min-width: 0;
+  padding: 10px 8px;
+  flex-direction: column;
+  gap: 5px;
+  background: var(--surface);
+  text-align: center;
+}
+.asana-import-metrics strong,
+.asana-import-result-grid strong {
+  color: var(--text);
+  font: 650 20px/1 var(--font-sans);
+}
+.asana-import-metrics small,
+.asana-import-result-grid small {
+  color: var(--text3);
+  font: 400 9px/1.2 var(--font-mono);
+}
+.asana-import-section-list {
+  display: flex;
+  max-height: 330px;
+  overflow-y: auto;
+  flex-direction: column;
+  scrollbar-width: thin;
+}
+.asana-import-section-list > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 38px;
+  padding: 8px 2px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text2);
+  font: 500 12px/1.25 var(--font-sans);
+}
+.asana-import-section-list > div:last-child { border-bottom: 0; }
+.asana-import-section-list b {
+  min-width: 28px;
+  color: var(--text3);
+  font: 400 10px/1 var(--font-mono);
+  text-align: right;
+}
+.asana-import-kicker {
+  color: var(--text3);
+  font: 500 10px/1 var(--font-mono);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.asana-import-options-title { margin-top: 5px; }
+.asana-import-new-project {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 0.8fr) 56px;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg2);
+}
+.asana-import-color-field input {
+  width: 100%;
+  min-height: 38px;
+  padding: 3px;
+}
+.asana-import-options .settings-check {
+  gap: 12px;
+  min-height: 54px;
+}
+.asana-import-options .settings-check > span {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 5px;
+}
+.asana-import-options .settings-check strong {
+  color: var(--text);
+  font: 550 12px/1.2 var(--font-sans);
+}
+.asana-import-options .settings-check small {
+  color: var(--text3);
+  font: 400 10px/1.35 var(--font-sans);
+}
+.asana-import-conflicts { margin-top: 2px; }
+.asana-import-options .modal-actions { margin-top: auto; }
+.asana-import-success {
+  display: flex;
+  min-height: 460px;
+  padding: 38px 24px 12px;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  text-align: center;
+}
+.asana-import-success-mark {
+  display: grid;
+  width: 54px;
+  height: 54px;
+  margin-bottom: 18px;
+  place-items: center;
+  border: 1px solid var(--accent-hover);
+  border-radius: 50%;
+  background: var(--accent-dim);
+  color: var(--accent-hover);
+  font: 600 24px/1 var(--font-sans);
+}
+.asana-import-success h3 {
+  margin: 9px 0 8px;
+  color: var(--text);
+  font: 650 23px/1.2 var(--font-sans);
+}
+.asana-import-success p {
+  max-width: 620px;
+  color: var(--text2);
+  font: 400 13px/1.55 var(--font-sans);
+}
+.asana-import-result-grid { width: min(620px, 100%); margin: 22px 0; }
+.asana-import-success .modal-actions { width: min(620px, 100%); }
+
 .app-toast {
   position: fixed;
   right: 20px;
@@ -2038,6 +2310,20 @@ button[id$="-delete-btn"]:hover {
     right: 12px;
     bottom: 76px;
   }
+
+  .asana-import-modal {
+    max-height: calc(100dvh - 16px);
+    padding: 16px;
+  }
+  .asana-import-layout { grid-template-columns: 1fr; }
+  .asana-import-preview { border-right: 0; border-bottom: 1px solid var(--border); }
+  .asana-import-section-list { max-height: 190px; }
+  .asana-import-new-project { grid-template-columns: 1fr 1fr; }
+  .asana-import-new-project .field-group:first-child { grid-column: 1 / -1; }
+  .asana-import-color-field { max-width: 72px; }
+  .asana-import-metrics,
+  .asana-import-result-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .asana-import-dropzone { min-height: 240px; }
 
   .sidebar-overlay { display: none; }
   .sidebar-overlay.active,
