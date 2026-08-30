@@ -132,7 +132,6 @@ let asanaImportState = {
   projectName: '',
   color: COLORS[4],
   includeCompleted: true,
-  includeSourceLinks: true,
   asanaAccessToken: '',
   conflictMode: 'skip',
   loading: false,
@@ -4686,7 +4685,6 @@ function resetAsanaImportState() {
     projectName: '',
     color: COLORS[4],
     includeCompleted: true,
-    includeSourceLinks: true,
     asanaAccessToken: '',
     conflictMode: 'skip',
     loading: false,
@@ -4915,10 +4913,6 @@ function renderAsanaImportModal() {
           <span><strong>Выполненные задачи</strong><small>${preview.completedTaskCount} шт. будут помечены в описании</small></span>
           <input type="checkbox" ${asanaImportState.includeCompleted ? 'checked' : ''} onchange="updateAsanaImportOption('includeCompleted', this.checked)" />
         </label>
-        <label class="settings-check">
-          <span><strong>Ссылки на Asana</strong><small>Добавить исходную ссылку в каждую карточку</small></span>
-          <input type="checkbox" ${asanaImportState.includeSourceLinks ? 'checked' : ''} onchange="updateAsanaImportOption('includeSourceLinks', this.checked)" />
-        </label>
         <div class="asana-import-comments-access${preview.commentCount ? ' has-comments' : ''}">
           <div>
             <strong>Комментарии Asana</strong>
@@ -4981,7 +4975,6 @@ async function runAsanaImport() {
           ? { asanaAccessToken }
           : {}),
         includeCompleted: asanaImportState.includeCompleted,
-        includeSourceLinks: asanaImportState.includeSourceLinks,
         conflictMode: asanaImportState.conflictMode,
       }),
     });

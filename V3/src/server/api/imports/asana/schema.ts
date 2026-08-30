@@ -24,7 +24,6 @@ export const asanaImportRequestSchema = z.object({
   target: asanaImportTargetSchema,
   asanaAccessToken: z.string().trim().min(1).max(1000).optional(),
   includeCompleted: z.boolean().default(true),
-  includeSourceLinks: z.boolean().default(true),
   conflictMode: z.enum(['skip', 'update']).default('skip'),
 });
 

@@ -41,7 +41,7 @@ function formatComments(comments: AsanaComment[], indent = '') {
   return lines;
 }
 
-function formatSubtask(task: AsanaTask, depth: number, includeSourceLinks: boolean): string[] {
+function formatSubtask(task: AsanaTask, depth: number): string[] {
   const indent = '  '.repeat(depth);
   const lines = [`${indent}${task.completed ? '☑' : '☐'} ${task.name}`];
   const details = task.notes.trim();
@@ -55,14 +55,13 @@ function formatSubtask(task: AsanaTask, depth: number, includeSourceLinks: boole
   }
   const dueDate = task.dueOn || task.dueAt;
   if (dueDate) lines.push(`${indent}  Срок: ${dueDate}`);
-  if (includeSourceLinks && task.permalinkUrl) lines.push(`${indent}  ${task.permalinkUrl}`);
   for (const subtask of task.subtasks) {
-    lines.push(...formatSubtask(subtask, depth + 1, includeSourceLinks));
+    lines.push(...formatSubtask(subtask, depth + 1));
   }
   return lines;
 }
 
-export function buildAsanaTaskBody(task: AsanaTask, includeSourceLinks: boolean) {
+export function buildAsanaTaskBody(task: AsanaTask) {
   const blocks: string[] = [];
   if (task.notes.trim()) blocks.push(task.notes.trim());
   if (task.comments.length) blocks.push(formatComments(task.comments).join('\n'));
@@ -74,11 +73,7 @@ export function buildAsanaTaskBody(task: AsanaTask, includeSourceLinks: boolean)
   if (meta.length) blocks.push(meta.join('\n'));
 
   if (task.subtasks.length) {
-    blocks.push(`Подзадачи\n${task.subtasks.flatMap(item => formatSubtask(item, 0, includeSourceLinks)).join('\n')}`);
-  }
-
-  if (includeSourceLinks && task.permalinkUrl) {
-    blocks.push(`Источник Asana\n${task.permalinkUrl}`);
+    blocks.push(`Подзадачи\n${task.subtasks.flatMap(item => formatSubtask(item, 0)).join('\n')}`);
   }
 
   return clampText(blocks.join('\n\n'), MAX_NOTE_BODY_LENGTH);
@@ -237,7 +232,7 @@ export async function importAsanaProject(
       }
 
       const title = clampText(task.name, 240);
-      const body = buildAsanaTaskBody(task, input.includeSourceLinks);
+      const body = buildAsanaTaskBody(task);
       if (existingNote) {
         const sectionChanged = existingNote.sectionId !== section.id;
         const sortOrder = sectionChanged
