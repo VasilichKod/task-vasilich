@@ -3363,6 +3363,17 @@ function renderProjectNoteCards(project, sections, notes) {
                 <span>${escapeHtml(section.name)}</span>
                 <span class="project-note-column-count">${sectionNotes.length}</span>
               </button>
+              <button
+                class="project-note-column-add-quick"
+                type="button"
+                title="Добавить заметку"
+                aria-label="Добавить заметку в раздел ${escapeHtml(section.name)}"
+                onpointerdown="event.stopPropagation()"
+                ondragstart="event.preventDefault(); event.stopPropagation()"
+                onclick="event.stopPropagation(); openProjectNoteModal(null, decodeInlineToken('${sectionToken}'))"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              </button>
               <button class="project-note-column-settings" type="button" onclick="openProjectNoteSectionModal(decodeInlineToken('${sectionToken}'))" aria-label="Настройки раздела ${escapeHtml(section.name)}">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg>
               </button>

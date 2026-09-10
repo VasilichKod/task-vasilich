@@ -3443,22 +3443,29 @@ button[id$="-delete-btn"]:hover {
   color: var(--text3);
   font: 400 11px/1 var(--font-mono);
 }
+.project-note-column-add-quick,
 .project-note-column-settings {
   display: grid;
-  flex: 0 0 32px;
-  width: 32px;
-  min-height: 32px;
+  flex: 0 0 30px;
+  width: 30px;
+  min-height: 30px;
   padding: 0;
   place-items: center;
   border-color: transparent;
   background: transparent;
   color: var(--text3);
 }
+.project-note-column-add-quick {
+  margin-right: -4px;
+  color: var(--text2);
+}
+.project-note-column-add-quick:hover,
 .project-note-column-settings:hover {
   border-color: var(--border);
   background: var(--surface);
   color: var(--text);
 }
+.project-note-column-add-quick:hover { color: var(--accent-text); }
 .project-note-column-list {
   display: flex;
   flex-direction: column;
