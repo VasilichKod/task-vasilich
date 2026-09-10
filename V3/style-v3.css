@@ -1818,6 +1818,17 @@ select option { background: var(--bg3); color: var(--text); }
   min-height: 320px;
   line-height: 1.65;
 }
+.project-note-modal-actions {
+  min-height: 47px;
+}
+.project-note-created-date {
+  display: inline-flex;
+  align-items: center;
+  margin-right: auto;
+  color: var(--text3);
+  font: 400 10px/1.25 var(--font-mono);
+  white-space: nowrap;
+}
 .project-note-error {
   color: var(--red);
   font-style: normal;
@@ -2910,13 +2921,53 @@ button[id$="-delete-btn"]:hover {
   gap: 8px;
   min-width: 0;
 }
+.project-workspace-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 34px;
+  padding: 0 2px 10px;
+}
 .project-workspace-label {
-  padding: 2px 2px 10px;
   color: var(--text3);
   font: 500 10px/1 var(--font-mono);
   letter-spacing: 0.1em;
   text-transform: uppercase;
 }
+.project-note-sort-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  height: 32px;
+  padding: 0 7px 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text3);
+  transition: border-color var(--t-fast), color var(--t-fast), background var(--t-fast);
+}
+.project-note-sort-control:hover,
+.project-note-sort-control:focus-within {
+  border-color: var(--border2);
+  background: var(--surface2);
+  color: var(--text2);
+}
+.project-note-sort-control svg { flex: 0 0 auto; }
+.project-note-sort-control select {
+  width: auto;
+  min-width: 132px;
+  height: 30px;
+  padding: 0 23px 0 0;
+  border: 0;
+  border-radius: 0;
+  background-color: transparent;
+  background-position: right 2px center;
+  color: var(--text2);
+  font: 500 11px/1 var(--font-sans);
+}
+.project-note-sort-control select:focus { border-color: transparent; }
 
 /* ─── GROUP WORKSPACE ─────────────────────────────────── */
 .group-workspace-view,
@@ -3251,6 +3302,7 @@ button[id$="-delete-btn"]:hover {
   font: 400 10px/1 var(--font-mono);
 }
 .project-note-card-footer svg { flex-shrink: 0; }
+.project-note-card-footer.is-icon-only { justify-content: flex-end; }
 .project-note-add-card {
   display: flex;
   align-items: center;
@@ -3414,6 +3466,10 @@ button[id$="-delete-btn"]:hover {
 .project-note-card:hover .project-note-card-drag {
   color: var(--text2);
   opacity: 1;
+}
+.project-board.is-date-sorted .project-note-card-drag {
+  opacity: 0;
+  pointer-events: none;
 }
 .project-note-column-title {
   display: flex;
@@ -4261,11 +4317,23 @@ button[id$="-delete-btn"]:hover {
   .project-note-card,
   .project-note-add-card { min-height: 154px; }
   .project-note-column { flex-basis: min(82vw, 302px); }
+  .project-workspace-toolbar {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .project-note-sort-control { max-width: 100%; }
   .project-note-column-drag,
   .project-note-card-drag { opacity: 0.7; }
+  .project-board.is-date-sorted .project-note-card-drag { opacity: 0; }
   .project-note-column .project-note-card { min-height: 112px; }
   .project-note-add-column { flex-basis: min(68vw, 220px); }
   .project-note-modal #project-note-body { min-height: 240px; }
+  .project-note-modal-actions { flex-wrap: wrap; }
+  .project-note-created-date {
+    flex: 1 0 100%;
+    min-height: 20px;
+  }
   .project-note-section-delete-choice { padding: 13px; }
   .project-note-section-move-btn,
   .project-note-section-delete-all-btn { align-self: stretch; }

@@ -245,11 +245,14 @@ export async function createProjectNote(
   await requireProject(workspaceId, projectId);
   await requireProjectNoteSection(workspaceId, projectId, input.sectionId);
 
-  const lastNote = await prisma.projectNote.findFirst({
+  const edgeNote = await prisma.projectNote.findFirst({
     where: { workspaceId, projectId, sectionId: input.sectionId },
-    orderBy: { sortOrder: 'desc' },
+    orderBy: { sortOrder: input.placement === 'top' ? 'asc' : 'desc' },
     select: { sortOrder: true },
   });
+  const sortOrder = input.placement === 'top'
+    ? (edgeNote?.sortOrder ?? 1) - 1
+    : (edgeNote?.sortOrder ?? -1) + 1;
 
   return prisma.projectNote.create({
     data: {
@@ -258,7 +261,7 @@ export async function createProjectNote(
       sectionId: input.sectionId,
       title: input.title,
       body: input.body,
-      sortOrder: (lastNote?.sortOrder ?? -1) + 1,
+      sortOrder,
     },
   });
 }

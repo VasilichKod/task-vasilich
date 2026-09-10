@@ -54,6 +54,7 @@ let state = {
     groupsOpen: false,
     projectsOpen: false,
     achievementYearsOpen: {},
+    projectNoteSortByProject: {},
   },
   dayColumnWidths: {},
   archivedCatalog: {
@@ -96,6 +97,7 @@ let projectNoteSectionsByProject = {};
 let projectNotesLoadingProjectId = null;
 let projectNotesError = '';
 let manageProjectNoteId = null;
+let projectNoteCreatePlacement = 'bottom';
 let manageProjectNoteSectionId = null;
 let _projectBoardDrag = null;
 let _projectBoardDropPosition = 'before';
@@ -252,6 +254,7 @@ function buildLocalWorkspaceSnapshot() {
     dayProjects: state.dayProjects,
     dayColumnWidths: state.dayColumnWidths,
     sidebarCollapsed: state.ui.sidebarCollapsed,
+    projectNoteSortByProject: state.ui.projectNoteSortByProject,
   };
 }
 
@@ -286,6 +289,7 @@ function applyLocalWorkspaceSnapshot(raw) {
   ensureProjectTemplates(false);
   state.dayProjects = normalizeDayProjects(raw.dayProjects);
   state.dayColumnWidths = raw.dayColumnWidths || {};
+  state.ui.projectNoteSortByProject = normalizeProjectNoteSortByProject(raw.projectNoteSortByProject);
   state.ui.sidebarCollapsed = raw.sidebarCollapsed === undefined
     ? Boolean(state.settings.sidebarCollapsedOnStart)
     : Boolean(raw.sidebarCollapsed);
@@ -1639,6 +1643,14 @@ function pluralizeRu(value, one, few, many) {
   if (lastDigit === 1) return one;
   if (lastDigit >= 2 && lastDigit <= 4) return few;
   return many;
+}
+
+function normalizeProjectNoteSortByProject(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  return Object.fromEntries(
+    Object.entries(value)
+      .filter(([, mode]) => mode === 'newest' || mode === 'oldest'),
+  );
 }
 
 function inlineToken(value) {
@@ -3282,6 +3294,29 @@ function getProjectWorkspaceStats(projectId) {
   };
 }
 
+function getProjectNoteSortMode(projectId) {
+  return state.ui.projectNoteSortByProject?.[projectId] || 'manual';
+}
+
+function sortProjectNotesForView(notes, mode) {
+  if (mode === 'manual') return notes;
+  const direction = mode === 'newest' ? -1 : 1;
+  return [...notes].sort((left, right) => {
+    const leftTime = new Date(left.createdAt || 0).getTime() || 0;
+    const rightTime = new Date(right.createdAt || 0).getTime() || 0;
+    return ((leftTime - rightTime) * direction) || (left.sortOrder - right.sortOrder);
+  });
+}
+
+function setProjectNoteSortMode(mode) {
+  if (!activeProjectId || !['manual', 'newest', 'oldest'].includes(mode)) return;
+  state.ui.projectNoteSortByProject ||= {};
+  if (mode === 'manual') delete state.ui.projectNoteSortByProject[activeProjectId];
+  else state.ui.projectNoteSortByProject[activeProjectId] = mode;
+  save();
+  renderProjectWorkspaceView();
+}
+
 function renderProjectTopBarTitle(project) {
   const pageTitle = document.getElementById('page-title');
   if (!pageTitle || !project) return;
@@ -3336,10 +3371,15 @@ function renderProjectNoteCards(project, sections, notes) {
     `;
   }
 
+  const sortMode = getProjectNoteSortMode(project.id);
+
   return `<div class="project-board-scroll">
-    <div class="project-board">
+    <div class="project-board${sortMode === 'manual' ? '' : ' is-date-sorted'}">
       ${sections.map((section, sectionIndex) => {
-        const sectionNotes = notes.filter(note => note.sectionId === section.id);
+        const sectionNotes = sortProjectNotesForView(
+          notes.filter(note => note.sectionId === section.id),
+          sortMode,
+        );
         const sectionToken = inlineToken(section.id);
         return `
           <section
@@ -3370,7 +3410,7 @@ function renderProjectNoteCards(project, sections, notes) {
                 aria-label="Добавить заметку в раздел ${escapeHtml(section.name)}"
                 onpointerdown="event.stopPropagation()"
                 ondragstart="event.preventDefault(); event.stopPropagation()"
-                onclick="event.stopPropagation(); openProjectNoteModal(null, decodeInlineToken('${sectionToken}'))"
+                onclick="event.stopPropagation(); openProjectNoteModal(null, decodeInlineToken('${sectionToken}'), 'top')"
               >
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
               </button>
@@ -3390,7 +3430,7 @@ function renderProjectNoteCards(project, sections, notes) {
                   <button
                     class="project-note-card"
                     type="button"
-                    draggable="true"
+                    draggable="${sortMode === 'manual'}"
                     data-project-note-id="${escapeHtml(note.id)}"
                     style="--project-note-color:${project.color};--note-delay:${Math.min(noteIndex, 8) * 35}ms"
                     onclick="openProjectNoteFromBoard(decodeInlineToken('${inlineToken(note.id)}'))"
@@ -3405,8 +3445,7 @@ function renderProjectNoteCards(project, sections, notes) {
                     </span>
                     <span class="project-note-card-title">${escapeHtml(note.title)}</span>
                     ${preview ? `<span class="project-note-card-preview">${escapeHtml(preview)}</span>` : ''}
-                    <span class="project-note-card-footer">
-                      <span>${escapeHtml(formatProjectNoteDate(note.updatedAt || note.createdAt))}</span>
+                    <span class="project-note-card-footer is-icon-only">
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
                     </span>
                   </button>
@@ -3641,11 +3680,22 @@ function renderProjectWorkspaceView() {
   if (!root || !project) return;
   const notes = projectNotesByProject[project.id] || [];
   const sections = projectNoteSectionsByProject[project.id] || [];
+  const sortMode = getProjectNoteSortMode(project.id);
   renderProjectTopBarTitle(project);
 
   root.innerHTML = `
     <div class="project-workspace-shell">
-      <div class="project-workspace-label">Рабочее пространство</div>
+      <div class="project-workspace-toolbar">
+        <div class="project-workspace-label">Рабочее пространство</div>
+        <label class="project-note-sort-control">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="4" y1="7" x2="14" y2="7"/><line x1="4" y1="12" x2="11" y2="12"/><line x1="4" y1="17" x2="8" y2="17"/><polyline points="17 5 20 8 23 5"/><line x1="20" y1="8" x2="20" y2="19"/></svg>
+          <select aria-label="Сортировка заметок" onchange="setProjectNoteSortMode(this.value)">
+            <option value="manual"${sortMode === 'manual' ? ' selected' : ''}>Свой порядок</option>
+            <option value="newest"${sortMode === 'newest' ? ' selected' : ''}>Сначала новые</option>
+            <option value="oldest"${sortMode === 'oldest' ? ' selected' : ''}>Сначала старые</option>
+          </select>
+        </label>
+      </div>
 
       <section class="project-notes-section">
         ${renderProjectNoteCards(project, sections, notes)}
@@ -3807,7 +3857,7 @@ function setProjectNoteError(message = '') {
   node.style.display = message ? 'block' : 'none';
 }
 
-function openProjectNoteModal(noteId = null, sectionId = null) {
+function openProjectNoteModal(noteId = null, sectionId = null, placement = 'bottom') {
   if (!activeProjectId) return;
   const sections = projectNoteSectionsByProject[activeProjectId] || [];
   if (!sections.length) {
@@ -3821,12 +3871,16 @@ function openProjectNoteModal(noteId = null, sectionId = null) {
   const selectedSectionId = note?.sectionId || sectionId || sections[0].id;
 
   manageProjectNoteId = note?.id || null;
+  projectNoteCreatePlacement = note ? 'bottom' : (placement === 'top' ? 'top' : 'bottom');
   document.getElementById('project-note-modal-title').textContent = note ? 'Редактировать заметку' : 'Новая заметка';
   document.getElementById('project-note-title').value = note?.title || '';
   document.getElementById('project-note-section-select').innerHTML = sections.map(section => `
     <option value="${escapeHtml(section.id)}"${section.id === selectedSectionId ? ' selected' : ''}>${escapeHtml(section.name)}</option>
   `).join('');
   document.getElementById('project-note-body').value = note?.body || '';
+  const createdDateNode = document.getElementById('project-note-created-date');
+  createdDateNode.textContent = note?.createdAt ? `Создано ${formatProjectNoteDate(note.createdAt)}` : '';
+  createdDateNode.style.display = note?.createdAt ? 'inline-flex' : 'none';
   document.getElementById('project-note-delete-btn').style.display = note ? 'inline-flex' : 'none';
   document.getElementById('project-note-save-btn').textContent = note ? 'Сохранить' : 'Создать';
   setProjectNoteError('');
@@ -3837,6 +3891,7 @@ function openProjectNoteModal(noteId = null, sectionId = null) {
 function closeProjectNoteModal() {
   document.getElementById('project-note-modal').classList.remove('open');
   manageProjectNoteId = null;
+  projectNoteCreatePlacement = 'bottom';
   setProjectNoteError('');
 }
 
@@ -3844,6 +3899,7 @@ async function saveProjectNote() {
   if (!activeProjectId) return;
   const projectId = activeProjectId;
   const noteId = manageProjectNoteId;
+  const placement = noteId ? 'bottom' : projectNoteCreatePlacement;
   const title = document.getElementById('project-note-title').value.trim();
   const sectionId = document.getElementById('project-note-section-select').value;
   const body = document.getElementById('project-note-body').value.trim();
@@ -3866,14 +3922,19 @@ async function saveProjectNote() {
       noteId ? `/api/project-notes/${encodeURIComponent(noteId)}` : `/api/projects/${encodeURIComponent(projectId)}/notes`,
       {
         method: noteId ? 'PATCH' : 'POST',
-        body: JSON.stringify({ sectionId, title, body }),
+        body: JSON.stringify({
+          sectionId,
+          title,
+          body,
+          ...(!noteId ? { placement } : {}),
+        }),
       },
     );
     const normalized = normalizeProjectNote(saved);
     const notes = projectNotesByProject[projectId] || [];
     projectNotesByProject[projectId] = noteId
       ? notes.map(note => note.id === noteId ? normalized : note)
-      : [...notes, normalized];
+      : (placement === 'top' ? [normalized, ...notes] : [...notes, normalized]);
     closeProjectNoteModal();
     void markProjectActivity(projectId, 'WORK');
     if (state.currentView === 'project' && activeProjectId === projectId) {
@@ -4665,6 +4726,7 @@ function buildExportPayload() {
     dayProjects: state.dayProjects,
     dayColumnWidths: state.dayColumnWidths,
     sidebarCollapsed: state.ui.sidebarCollapsed,
+    projectNoteSortByProject: state.ui.projectNoteSortByProject,
   };
 }
 
@@ -5054,6 +5116,7 @@ async function importAllDataFromFile(event) {
     ensureProjectTemplates(false);
     state.dayProjects = normalizeDayProjects(raw.dayProjects);
     state.dayColumnWidths = raw.dayColumnWidths || {};
+    state.ui.projectNoteSortByProject = normalizeProjectNoteSortByProject(raw.projectNoteSortByProject);
     state.ui.sidebarCollapsed = raw.sidebarCollapsed === undefined
       ? Boolean(state.settings.sidebarCollapsedOnStart)
       : Boolean(raw.sidebarCollapsed);

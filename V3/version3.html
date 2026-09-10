@@ -328,7 +328,8 @@
         <textarea id="project-note-body" maxlength="50000" placeholder="Вся полезная информация по проекту..."></textarea>
       </label>
       <div class="modal-note project-note-error" id="project-note-error" style="display:none"></div>
-      <div class="modal-actions modal-actions-right">
+      <div class="modal-actions modal-actions-right project-note-modal-actions">
+        <span class="project-note-created-date" id="project-note-created-date" style="display:none"></span>
         <button id="project-note-delete-btn" type="button" onclick="deleteProjectNote()" style="display:none">Удалить</button>
         <button class="primary" id="project-note-save-btn" type="button" onclick="saveProjectNote()">Сохранить</button>
       </div>

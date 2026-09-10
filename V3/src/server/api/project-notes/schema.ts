@@ -8,6 +8,7 @@ export const createProjectNoteSchema = z.object({
   sectionId: z.string().trim().min(1),
   title: z.string().trim().min(1).max(240),
   body: z.string().max(50000).optional().default(''),
+  placement: z.enum(['top', 'bottom']).optional().default('bottom'),
 });
 
 export const updateProjectNoteSchema = z.object({
