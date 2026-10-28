@@ -3138,6 +3138,9 @@ function renderBoard() {
   html += '</tr>';
 
   state.groups.forEach(group => {
+    const hasProjectsThisWeek = DAYS.some((_, dayIdx) => state.dayProjects[wk][group.id][dayIdx].length > 0);
+    if (!hasProjectsThisWeek) return;
+
     html += `<tr><td class="group-name"><div class="group-name-inner" style="color:${group.color}">${escapeHtml(group.label)}</div></td>`;
     DAYS.forEach((day, dayIdx) => {
       const projectIds = getDayProjects(wk, group.id, dayIdx);
