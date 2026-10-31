@@ -20,9 +20,12 @@ function buildWeeklyTaskMap(
     title: string;
     note: string | null;
     isDone: boolean;
+    focusArea: string | null;
+    important: boolean;
+    completedAt: Date | null;
   }>,
 ) {
-  const result: Record<string, Record<string, Record<number, Array<{ id: string; text: string; done: boolean; note: string }>>>> = {};
+  const result: Record<string, Record<string, Record<number, Array<{ id: string; text: string; done: boolean; note: string; focusArea: string | null; important: boolean; completedAt: string | null }>>>> = {};
 
   for (const task of tasks) {
     const weekKey = toWeekKey(task.weekStartDate);
@@ -34,6 +37,9 @@ function buildWeeklyTaskMap(
       text: task.title,
       done: task.isDone,
       note: task.note ?? '',
+      focusArea: task.focusArea,
+      important: task.important,
+      completedAt: task.completedAt?.toISOString() ?? null,
     });
   }
 
@@ -46,9 +52,10 @@ function buildRecurringStatusMap(
     weekStartDate: Date;
     isDone: boolean;
     note: string | null;
+    completedAt: Date | null;
   }>,
 ) {
-  const result: Record<string, Record<string, { done: boolean; note: string }>> = {};
+  const result: Record<string, Record<string, { done: boolean; note: string; completedAt: string | null }>> = {};
 
   for (const status of statuses) {
     const weekKey = toWeekKey(status.weekStartDate);
@@ -56,6 +63,7 @@ function buildRecurringStatusMap(
     result[weekKey][status.recurringTaskId] = {
       done: status.isDone,
       note: status.note ?? '',
+      completedAt: status.completedAt?.toISOString() ?? null,
     };
   }
 
@@ -69,9 +77,12 @@ function buildBacklogMap(
     title: string;
     note: string | null;
     isDone: boolean;
+    focusArea: string | null;
+    important: boolean;
+    completedAt: Date | null;
   }>,
 ) {
-  const result: Record<string, Array<{ id: string; text: string; done: boolean; note: string }>> = {};
+  const result: Record<string, Array<{ id: string; text: string; done: boolean; note: string; focusArea: string | null; important: boolean; completedAt: string | null }>> = {};
 
   for (const task of tasks) {
     result[task.projectId] ||= [];
@@ -80,6 +91,9 @@ function buildBacklogMap(
       text: task.title,
       done: task.isDone,
       note: task.note ?? '',
+      focusArea: task.focusArea,
+      important: task.important,
+      completedAt: task.completedAt?.toISOString() ?? null,
     });
   }
 
@@ -290,6 +304,7 @@ export async function getWorkspaceBootstrap(input: WorkspaceBootstrapInput) {
         sortOrder: true,
         activityScore: true,
         lastActivityAt: true,
+        focusArea: true,
       },
     }),
     prisma.weeklyTask.findMany({
@@ -303,6 +318,9 @@ export async function getWorkspaceBootstrap(input: WorkspaceBootstrapInput) {
         title: true,
         note: true,
         isDone: true,
+        focusArea: true,
+        important: true,
+        completedAt: true,
       },
     }),
     prisma.backlogTask.findMany({
@@ -314,6 +332,9 @@ export async function getWorkspaceBootstrap(input: WorkspaceBootstrapInput) {
         title: true,
         note: true,
         isDone: true,
+        focusArea: true,
+        important: true,
+        completedAt: true,
       },
     }),
     prisma.recurringTask.findMany({
@@ -324,6 +345,8 @@ export async function getWorkspaceBootstrap(input: WorkspaceBootstrapInput) {
         projectId: true,
         dayIndex: true,
         title: true,
+        focusArea: true,
+        important: true,
       },
     }),
     prisma.recurringTaskStatus.findMany({
@@ -337,6 +360,7 @@ export async function getWorkspaceBootstrap(input: WorkspaceBootstrapInput) {
         weekStartDate: true,
         isDone: true,
         note: true,
+        completedAt: true,
       },
     }),
     prisma.projectTemplate.findMany({
@@ -433,12 +457,15 @@ export async function getWorkspaceBootstrap(input: WorkspaceBootstrapInput) {
       label: project.name,
       group: project.groupId,
       color: project.color,
+      focusArea: project.focusArea,
     })),
     recurring: recurringTasks.map(task => ({
       id: task.id,
       subId: task.projectId,
       dayIdx: task.dayIndex,
       text: task.title,
+      focusArea: task.focusArea,
+      important: task.important,
     })),
     recurringStatus: buildRecurringStatusMap(recurringStatuses),
     backlog: buildBacklogMap(backlogTasks),

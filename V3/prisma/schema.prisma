@@ -147,6 +147,7 @@ model Project {
   activityScore  Float     @default(0) @map("activity_score")
   lastActivityAt DateTime? @map("last_activity_at")
   balanceEnabled Boolean   @default(true) @map("balance_enabled")
+  focusArea      String    @default("unassigned") @map("focus_area")
   archivedAt     DateTime? @map("archived_at")
   deleteAfterAt  DateTime? @map("delete_after_at")
   createdAt      DateTime  @default(now()) @map("created_at")
@@ -258,6 +259,9 @@ model WeeklyTask {
   title               String
   note                String?
   isDone              Boolean  @default(false) @map("is_done")
+  focusArea           String?  @map("focus_area")
+  important           Boolean  @default(false)
+  completedAt         DateTime? @map("completed_at")
   sortOrder           Int      @default(0) @map("sort_order")
   sourceBacklogTaskId String?  @map("source_backlog_task_id")
   createdAt           DateTime @default(now()) @map("created_at")
@@ -279,6 +283,9 @@ model BacklogTask {
   title       String
   note        String?
   isDone      Boolean   @default(false) @map("is_done")
+  focusArea   String?   @map("focus_area")
+  important   Boolean   @default(false)
+  completedAt DateTime? @map("completed_at")
   sortOrder   Int       @default(0) @map("sort_order")
   archivedAt  DateTime? @map("archived_at")
   createdAt   DateTime  @default(now()) @map("created_at")
@@ -298,6 +305,8 @@ model RecurringTask {
   projectId   String    @map("project_id")
   dayIndex    Int       @map("day_index")
   title       String
+  focusArea   String?   @map("focus_area")
+  important   Boolean   @default(false)
   sortOrder   Int       @default(0) @map("sort_order")
   archivedAt  DateTime? @map("archived_at")
   createdAt   DateTime  @default(now()) @map("created_at")
@@ -317,6 +326,7 @@ model RecurringTaskStatus {
   recurringTaskId String   @map("recurring_task_id")
   weekStartDate   DateTime @map("week_start_date") @db.Date
   isDone          Boolean  @default(false) @map("is_done")
+  completedAt     DateTime? @map("completed_at")
   note            String?
   createdAt       DateTime @default(now()) @map("created_at")
   updatedAt       DateTime @updatedAt @map("updated_at")

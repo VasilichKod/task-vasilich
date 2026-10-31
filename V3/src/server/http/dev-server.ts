@@ -156,6 +156,14 @@ async function route(request: Request) {
     return serveStaticAsset('features-v3.css');
   }
 
+  if (request.method === 'GET' && url.pathname === '/focus-v3.css') {
+    return serveStaticAsset('focus-v3.css');
+  }
+
+  if (request.method === 'GET' && url.pathname === '/focus-v3.js') {
+    return serveStaticAsset('focus-v3.js');
+  }
+
   if (request.method === 'GET' && url.pathname === '/app-v3.js') {
     return serveStaticAsset('app-v3.js');
   }

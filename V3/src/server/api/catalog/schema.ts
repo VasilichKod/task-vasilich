@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { focusAreaSchema } from '../planning/focus.js';
 
 const colorSchema = z.string().trim().regex(/^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/);
 
@@ -19,6 +20,7 @@ export const createProjectSchema = z.object({
   name: z.string().trim().min(1).max(120),
   color: colorSchema,
   balanceEnabled: z.boolean().optional(),
+  focusArea: focusAreaSchema.optional(),
   sortOrder: z.number().int().min(0).optional(),
 });
 
@@ -27,6 +29,7 @@ export const updateProjectSchema = z.object({
   name: z.string().trim().min(1).max(120).optional(),
   color: colorSchema.optional(),
   balanceEnabled: z.boolean().optional(),
+  focusArea: focusAreaSchema.optional(),
   sortOrder: z.number().int().min(0).optional(),
 });
 

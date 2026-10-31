@@ -14,6 +14,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <link rel="stylesheet" href="./style-v3.css" />
   <link rel="stylesheet" href="./features-v3.css" />
+  <link rel="stylesheet" href="./focus-v3.css" />
 </head>
 <body>
   <div id="splash">
@@ -279,6 +280,19 @@
         <span class="mobile-nav-text">Меню</span>
       </button>
     </nav>
+    <button class="focus-launcher" id="focus-launcher" type="button" onclick="openFocusJournal()" aria-label="Открыть журнал фокуса" aria-controls="focus-journal" aria-expanded="false" hidden>
+      <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="3" width="16" height="18" rx="3"/><path d="M8 8h8M8 12h5M8 16h3"/></svg>
+      <span>Фокус</span><span class="focus-launcher-count" id="focus-launcher-count">0</span>
+    </button>
+    <div class="focus-backdrop" id="focus-backdrop" onclick="closeFocusJournal()" hidden></div>
+    <aside class="focus-journal" id="focus-journal" role="dialog" aria-modal="true" aria-labelledby="focus-journal-title" tabindex="-1" hidden>
+      <header class="focus-journal-header">
+        <div><span class="focus-eyebrow">Меньше шума · больше смысла</span><h2 id="focus-journal-title">Журнал фокуса</h2><p id="focus-journal-period"></p></div>
+        <button class="focus-close" type="button" onclick="closeFocusJournal()" aria-label="Закрыть журнал">×</button>
+      </header>
+      <div class="focus-journal-body" id="focus-journal-body"></div>
+      <footer class="focus-journal-footer"><span>Дни — ориентир, а не дедлайн.</span><button type="button" onclick="closeFocusJournal(); switchView('history')">Открыть баланс ↗</button></footer>
+    </aside>
   </div>
 
   <!-- Task modal -->
@@ -291,6 +305,10 @@
         </button>
       </div>
       <input id="task-input" placeholder="Текст задачи..." />
+      <div class="task-focus-fields">
+        <label class="field-group"><span class="form-label">Смысл задачи</span><select id="task-focus-area"></select></label>
+        <label class="task-important-control"><input id="task-important" type="checkbox" /><span>★ Важное</span></label>
+      </div>
       <textarea id="task-note" placeholder="Заметка к задаче..."></textarea>
       <label class="field-group">
         <span class="form-label">День</span>
@@ -406,6 +424,11 @@
         <select id="create-task-project-select"></select>
       </label>
       <input id="create-task-input" placeholder="Текст задачи..." />
+      <div class="task-focus-fields">
+        <label class="field-group"><span class="form-label">Смысл задачи</span><select id="create-task-focus-area"></select></label>
+        <label class="task-important-control"><input id="create-task-important" type="checkbox" /><span>★ Важное</span></label>
+      </div>
+      <label class="task-completed-control"><input id="create-task-completed" type="checkbox" /> Уже выполнено сегодня</label>
       <div class="modal-actions modal-actions-right">
         <button class="primary" type="button" onclick="saveCreatedTask()">Добавить</button>
       </div>
@@ -487,6 +510,11 @@
         </span>
         <input id="proj-balance-enabled" type="checkbox" checked />
       </label>
+      <label class="field-group">
+        <span class="form-label">Смысл задач по умолчанию</span>
+        <select id="proj-focus-area"></select>
+        <span class="modal-copy">Новые и неразмеченные задачи наследуют смысл проекта. У любой задачи можно выбрать другой.</span>
+      </label>
       <div class="modal-actions modal-actions-right">
         <button id="manage-delete-btn" type="button" onclick="deleteProject()" style="display:none">В архив</button>
         <button class="primary" id="manage-save-btn" type="button" onclick="saveProject()">Сохранить</button>
@@ -560,6 +588,10 @@
             <span class="form-label">Название задачи</span>
             <input id="recurring-text" placeholder="Название постоянной задачи" />
           </label>
+          <div class="task-focus-fields">
+            <label class="field-group"><span class="form-label">Смысл задачи</span><select id="recurring-focus-area"></select></label>
+            <label class="task-important-control"><input id="recurring-important" type="checkbox" /><span>★ Важное</span></label>
+          </div>
           <label class="field-group">
             <span class="form-label">Проект</span>
             <select id="recurring-project-select"></select>
@@ -701,6 +733,7 @@
 
   <div class="app-toast" id="app-toast" role="status" aria-live="polite"></div>
 
+  <script src="./focus-v3.js"></script>
   <script src="./app-v3.js"></script>
 </body>
 </html>

@@ -110,7 +110,7 @@ let newWishListColor = COLORS[0];
 let wishlistLoading = false;
 let wishlistError = '';
 let wishlistStatusFilter = 'ACTIVE';
-let balancePeriod = 'week';
+let balancePeriod = 'month';
 let balanceOffset = 0;
 let balanceGroupFilter = 'all';
 let balanceProjectFilter = 'all';
@@ -436,6 +436,7 @@ function toCatalogProjects(projects) {
     updatedAt: project.updatedAt || '',
     archivedAt: project.archivedAt || '',
     balanceEnabled: project.balanceEnabled !== false,
+    focusArea: normalizeFocusArea(project.focusArea),
   }));
 }
 
@@ -1160,6 +1161,7 @@ async function submitRegister(event) {
 }
 
 async function logoutUser() {
+  closeFocusJournal();
   try {
     await authFetch('/api/auth/logout', {
       method: 'POST',
@@ -1200,12 +1202,15 @@ function normalizeColor(value, fallback) {
 }
 
 function makeTask(task) {
-  if (typeof task === 'string') return { id: taskId(), text: task, done: false, note: '' };
+  if (typeof task === 'string') task = { text: task };
   return {
     id: task.id || taskId(),
     text: task.text || '',
     done: Boolean(task.done),
     note: task.note || '',
+    focusArea: normalizeTaskFocusArea(task.focusArea),
+    important: Boolean(task.important),
+    completedAt: task.done ? normalizeCompletedAt(task.completedAt) : null,
   };
 }
 
@@ -1230,6 +1235,7 @@ function normalizeSubs(subs, groups) {
     lastActivityAt: sub.lastActivityAt || '',
     updatedAt: sub.updatedAt || '',
     balanceEnabled: sub.balanceEnabled !== false,
+    focusArea: normalizeFocusArea(sub.focusArea),
   }));
 }
 
@@ -1358,6 +1364,8 @@ function normalizeRecurring(items, subs) {
     subId: subs.some(sub => sub.id === item.subId) ? item.subId : fallbackSubId,
     dayIdx: Number.isInteger(item.dayIdx) ? item.dayIdx : 0,
     text: item.text || '',
+    focusArea: normalizeTaskFocusArea(item.focusArea),
+    important: Boolean(item.important),
   })).filter(item => item.text.trim());
 }
 
@@ -1799,6 +1807,9 @@ function getDisplayTasksForCell(wk, subId, dayIdx) {
         note: status.note || '',
         recurring: true,
         recurringId: item.id,
+        focusArea: item.focusArea,
+        important: Boolean(item.important),
+        completedAt: status.completedAt || null,
       };
     });
   const regular = getCellForWeek(wk, subId, dayIdx).map(task => ({ ...task, recurring: false }));
@@ -2250,6 +2261,7 @@ function positionGroupFlyout(row) {
 }
 
 function renderCurrentView() {
+  refreshFocusJournal();
   persistNavigationState();
   const graphView = document.getElementById('graph-view');
   const tasksView = document.getElementById('tasks-view');
@@ -2291,8 +2303,10 @@ function renderCurrentView() {
     weekNav.style.display = 'flex';
     pageTitle.style.display = 'none';
     pageTitle.textContent = '';
-    statsBar.style.display = 'flex';
-    createBtn.style.display = 'none';
+    statsBar.style.display = 'none';
+    createBtn.style.display = 'inline-flex';
+    createBtn.textContent = '+ задача';
+    createBtn.onclick = () => openCreateTaskModal();
     addProjectBtn.style.display = 'inline-flex';
     addProjectBtn.textContent = '+ проект';
     addProjectBtn.onclick = () => openDayProjectModal();
@@ -2478,35 +2492,10 @@ function getBalancePeriodBounds() {
 
 function getBalanceCompletedCounts(start, end) {
   const counts = Object.fromEntries(state.subs.map(project => [project.id, 0]));
-  const inRange = date => date && date >= start && date < end;
-
-  Object.entries(state.data || {}).forEach(([wk, projectMap]) => {
-    const monday = parseWeekKeyDate(wk);
-    if (!monday) return;
-    Object.entries(projectMap || {}).forEach(([projectId, dayMap]) => {
-      Object.entries(dayMap || {}).forEach(([dayIdx, tasks]) => {
-        const date = new Date(monday);
-        date.setDate(monday.getDate() + Number(dayIdx));
-        if (!inRange(date)) return;
-        const doneCount = (tasks || []).filter(task => task.done).length;
-        counts[projectId] = (counts[projectId] || 0) + doneCount;
-      });
-    });
-  });
-
-  const recurringById = new Map((state.recurring || []).map(task => [task.id, task]));
-  Object.entries(state.recurringStatus || {}).forEach(([wk, statusMap]) => {
-    const monday = parseWeekKeyDate(wk);
-    if (!monday) return;
-    Object.entries(statusMap || {}).forEach(([recurringId, status]) => {
-      if (!status?.done) return;
-      const recurring = recurringById.get(recurringId);
-      if (!recurring) return;
-      const date = new Date(monday);
-      date.setDate(monday.getDate() + Number(recurring.dayIdx || 0));
-      if (!inRange(date)) return;
-      counts[recurring.subId] = (counts[recurring.subId] || 0) + 1;
-    });
+  collectCompletedFocusActivities().forEach(row => {
+    if (row.date && row.date >= start && row.date < end) {
+      counts[row.projectId] = (counts[row.projectId] || 0) + 1;
+    }
   });
 
   return counts;
@@ -2689,6 +2678,9 @@ function renderBalanceView() {
         </div>
       </section>
 
+      ${renderFocusBalance(report)}
+
+      <details class="focus-project-coverage"><summary>Охват проектов и групп</summary>
       <section class="balance-overview">
         <div class="balance-wheel-panel">
           <div class="balance-section-heading">
@@ -2727,6 +2719,7 @@ function renderBalanceView() {
           </div>
         </div>
       </section>
+      </details>
 
       <section class="balance-projects-panel">
         <div class="balance-section-heading">
@@ -2748,6 +2741,7 @@ function renderBalanceView() {
                 <div class="balance-project-copy">
                   <strong>${escapeHtml(project.label)}</strong>
                   <span>${escapeHtml(group?.label || 'Без группы')}</span>
+                  <select class="balance-project-area" aria-label="Смысл проекта: ${escapeHtml(project.label)}" onchange="setProjectFocusArea(decodeInlineToken('${inlineToken(project.id)}'), this.value)">${focusAreaOptions(normalizeFocusArea(project.focusArea))}</select>
                 </div>
                 <div class="balance-project-result ${count > 0 ? 'touched' : ''}">
                   <strong>${enabled ? count : '—'}</strong>
@@ -3121,7 +3115,7 @@ function renderBoard() {
   ensureDayProjectsWeek(wk);
   document.getElementById('week-label').textContent = weekLabel(state.weekOffset);
   document.getElementById('week-label-mobile').textContent = weekLabelShort(state.weekOffset);
-  renderStats();
+  refreshFocusJournal();
   renderSidebarSummary();
   renderSidebarLists();
 
@@ -3167,7 +3161,7 @@ function renderBoard() {
             : '';
           html += `<div class="task-item${task.done ? ' done' : ''}" ${task.recurring ? '' : `draggable="true" ondragstart="dragTask(event, decodeInlineToken('${inlineToken(task.id)}'))"`}>
             <input type="checkbox" ${task.done ? 'checked' : ''} onchange="toggleById(decodeInlineToken('${inlineToken(task.id)}'))">
-            <button class="task-text" type="button" onclick="openTaskDetailsById(event, decodeInlineToken('${inlineToken(task.id)}'))">${escapeHtml(task.text)}</button>
+            <button class="task-text" type="button" onclick="openTaskDetailsById(event, decodeInlineToken('${inlineToken(task.id)}'))">${renderTaskFocusMark(task, subId)}${escapeHtml(task.text)}</button>
             ${noteBadge || action ? `<div class="task-tools">${noteBadge}${action}</div>` : ''}
           </div>`;
         });
@@ -3222,7 +3216,7 @@ function renderTasksView() {
                   ${tasks.length ? tasks.map(task => `
                     <div class="task-item task-item-backlog${task.done ? ' done' : ''}">
                       <input type="checkbox" ${task.done ? 'checked' : ''} onchange="toggleById(decodeInlineToken('${inlineToken(task.id)}'))">
-                      <button class="task-text" type="button" onclick="openTaskDetailsById(event, decodeInlineToken('${inlineToken(task.id)}'))">${escapeHtml(task.text)}</button>
+                      <button class="task-text" type="button" onclick="openTaskDetailsById(event, decodeInlineToken('${inlineToken(task.id)}'))">${renderTaskFocusMark(task, project.id)}${escapeHtml(task.text)}</button>
                       ${task.note?.trim() ? `<div class="task-tools"><button class="note-badge" type="button" onclick="openTaskDetailsById(event, decodeInlineToken('${inlineToken(task.id)}'))">📝</button></div>` : ''}
                     </div>
                   `).join('') : ''}
@@ -5327,7 +5321,7 @@ function toggleById(taskIdValue) {
   if (recurringMeta) {
     const recurring = state.recurring.find(item => item.id === recurringMeta.recurringId);
     const status = getRecurringStatus(recurringMeta.wk, recurringMeta.recurringId);
-    status.done = !status.done;
+    toggleTaskCompletion(status);
     save();
     if (recurring) void markProjectActivity(recurring.subId, 'WORK');
     renderBoard();
@@ -5336,7 +5330,7 @@ function toggleById(taskIdValue) {
 
   const record = findTaskRecord(taskIdValue);
   if (record) {
-    record.task.done = !record.task.done;
+    toggleTaskCompletion(record.task);
     save();
     void markProjectActivity(record.subId, 'WORK');
     renderCurrentView();
@@ -5345,7 +5339,7 @@ function toggleById(taskIdValue) {
 
   const backlogRecord = findBacklogTaskRecord(taskIdValue);
   if (!backlogRecord) return;
-  backlogRecord.task.done = !backlogRecord.task.done;
+  toggleTaskCompletion(backlogRecord.task);
   save();
   void markProjectActivity(backlogRecord.subId, 'WORK');
   renderCurrentView();
@@ -5465,12 +5459,13 @@ function openTaskDetailsById(event, taskIdValue) {
     document.getElementById('task-day-select').value = String(recurring.dayIdx);
     document.getElementById('task-day-select').disabled = true;
     document.getElementById('task-note').value = status.note || '';
+    fillTaskFocusFields('task', recurring, recurring.subId);
     document.getElementById('task-done-btn').style.display = 'inline-flex';
     document.getElementById('task-done-btn').textContent = status.done ? 'Не выполнено' : 'Выполнено';
     document.getElementById('task-delete-btn').style.display = 'none';
     document.getElementById('task-send-btn').style.display = 'none';
     document.getElementById('task-next-week-btn').style.display = 'none';
-    document.getElementById('task-save-btn').textContent = 'Сохранить заметку';
+    document.getElementById('task-save-btn').textContent = 'Сохранить';
     document.getElementById('task-modal-title').textContent = `${_taskMeta.label} — ${DAYS[recurring.dayIdx]}`;
     document.getElementById('task-modal').classList.add('open');
     void markProjectActivity(recurring.subId, 'WORK');
@@ -5494,6 +5489,7 @@ function openTaskDetailsById(event, taskIdValue) {
     document.getElementById('task-day-select').value = String(record.dayIdx);
     document.getElementById('task-day-select').disabled = false;
     document.getElementById('task-note').value = record.task.note || '';
+    fillTaskFocusFields('task', record.task, record.subId);
     document.getElementById('task-done-btn').style.display = 'inline-flex';
     document.getElementById('task-done-btn').textContent = record.task.done ? 'Не выполнено' : 'Выполнено';
     document.getElementById('task-delete-btn').style.display = 'inline-flex';
@@ -5520,6 +5516,7 @@ function openTaskDetailsById(event, taskIdValue) {
   document.getElementById('task-day-select').value = '0';
   document.getElementById('task-day-select').disabled = false;
   document.getElementById('task-note').value = backlogRecord.task.note || '';
+  fillTaskFocusFields('task', backlogRecord.task, backlogRecord.subId);
   document.getElementById('task-done-btn').style.display = 'inline-flex';
   document.getElementById('task-done-btn').textContent = backlogRecord.task.done ? 'Не выполнено' : 'Выполнено';
   document.getElementById('task-delete-btn').style.display = 'inline-flex';
@@ -5543,6 +5540,8 @@ function saveTask() {
   const note = document.getElementById('task-note').value.trim();
   if (_taskMeta.mode === 'recurring') {
     getRecurringStatus(_taskMeta.wk, _taskMeta.recurringId).note = note;
+    const recurring = state.recurring.find(item => item.id === _taskMeta.recurringId);
+    if (recurring) Object.assign(recurring, readTaskFocusFields('task'));
     save();
     closeTaskModal();
     renderBoard();
@@ -5556,6 +5555,7 @@ function saveTask() {
     if (!record) return;
     record.task.text = text;
     record.task.note = note;
+    Object.assign(record.task, readTaskFocusFields('task'));
     save();
     closeTaskModal();
     renderTasksView();
@@ -5569,6 +5569,7 @@ function saveTask() {
   if (!record) return;
   record.task.text = text;
   record.task.note = note;
+  Object.assign(record.task, readTaskFocusFields('task'));
   if (record.dayIdx !== nextDay) {
     removeTaskById(_taskMeta.taskId, _taskMeta.wk);
     insertTask(_taskMeta.wk, record.subId, nextDay, record.task);
@@ -5627,7 +5628,7 @@ function moveTaskToNextWeek(taskIdValue, fromWeek, sourceWeekOffset) {
   if (!removed) return;
 
   const toWeek = weekKey(sourceWeekOffset + 1);
-  const movedTask = { ...removed.task, done: false };
+  const movedTask = { ...removed.task, done: false, completedAt: null };
   ensureDayProjectsWeek(toWeek);
   insertTask(toWeek, removed.subId, removed.dayIdx, movedTask);
 
@@ -5647,17 +5648,17 @@ function toggleTaskDoneFromModal() {
   if (!_taskMeta?.taskId) return;
   if (_taskMeta.mode === 'recurring') {
     const status = getRecurringStatus(_taskMeta.wk, _taskMeta.recurringId);
-    status.done = !status.done;
+    toggleTaskCompletion(status);
     document.getElementById('task-done-btn').textContent = status.done ? 'Не выполнено' : 'Выполнено';
   } else {
     const record = findTaskRecord(_taskMeta.taskId, _taskMeta.wk);
     if (record) {
-      record.task.done = !record.task.done;
+      toggleTaskCompletion(record.task);
       document.getElementById('task-done-btn').textContent = record.task.done ? 'Не выполнено' : 'Выполнено';
     } else {
       const backlogRecord = findBacklogTaskRecord(_taskMeta.taskId);
       if (!backlogRecord) return;
-      backlogRecord.task.done = !backlogRecord.task.done;
+      toggleTaskCompletion(backlogRecord.task);
       document.getElementById('task-done-btn').textContent = backlogRecord.task.done ? 'Не выполнено' : 'Выполнено';
     }
   }
@@ -5672,7 +5673,7 @@ function sendTaskToGraph() {
   const record = removeBacklogTaskById(_taskMeta.taskId);
   if (!record) return;
   const wk = weekKey(state.weekOffset);
-  const task = { ...record.task, done: false };
+  const task = { ...record.task, done: false, completedAt: null };
   insertTask(wk, record.subId, dayIdx, task);
   const sub = getSub(record.subId);
   if (sub && !getDayProjects(wk, sub.group, dayIdx).includes(record.subId)) {
@@ -5707,6 +5708,7 @@ function renderCreateTaskOptions() {
   } else {
     _createTaskMeta.subId = '';
   }
+  refreshTaskFocusInheritance('create-task', _createTaskMeta.subId);
 }
 
 function openCreateTaskModal(mode = 'week', groupId = null, dayIdx = null, subId = null) {
@@ -5728,6 +5730,8 @@ function openCreateTaskModal(mode = 'week', groupId = null, dayIdx = null, subId
   document.getElementById('create-task-title').textContent = mode === 'backlog' ? 'Добавить задачу в список' : 'Добавить задачу';
   document.getElementById('create-task-day-group').style.display = mode === 'backlog' ? 'none' : 'flex';
   document.getElementById('create-task-input').value = '';
+  document.getElementById('create-task-completed').checked = false;
+  fillTaskFocusFields('create-task', {}, subId || document.getElementById('create-task-project-select').value);
   renderCreateTaskOptions();
   document.getElementById('create-task-modal').classList.add('open');
   setTimeout(() => document.getElementById('create-task-input')?.focus(), 20);
@@ -5745,15 +5749,17 @@ function saveCreatedTask() {
   const groupId = document.getElementById('create-task-group-select').value;
   const dayIdx = Number(document.getElementById('create-task-day-select').value);
   if (!text || !subId) return;
+  const completed = document.getElementById('create-task-completed').checked;
+  const task = makeTask({ text, done: completed, note: '', ...readTaskFocusFields('create-task'), completedAt: completed ? new Date().toISOString() : null });
   if (_createTaskMeta.mode === 'backlog') {
-    getBacklogForProject(subId).push(makeTask({ text, done: false, note: '' }));
+    getBacklogForProject(subId).push(task);
     save();
     void markProjectActivity(subId, 'WORK');
     closeCreateTaskModal();
-    renderTasksView();
+    renderCurrentView();
     return;
   }
-  insertTask(_createTaskMeta.wk, subId, dayIdx, makeTask({ text, done: false, note: '' }));
+  insertTask(_createTaskMeta.wk, subId, dayIdx, task);
   if (!getDayProjects(_createTaskMeta.wk, groupId, dayIdx).includes(subId)) {
     getDayProjects(_createTaskMeta.wk, groupId, dayIdx).push(subId);
   }
@@ -5888,7 +5894,7 @@ function carryOverUnfinished() {
           remaining.push(task);
           return;
         }
-        insertTask(toWeek, subId, dayIdx, makeTask({ text: task.text, done: false, note: task.note || '' }));
+        insertTask(toWeek, subId, dayIdx, makeTask({ ...task, id: taskId(), done: false, completedAt: null }));
         const sub = getSub(subId);
         if (sub && !getDayProjects(toWeek, sub.group, dayIdx).includes(subId)) {
           getDayProjects(toWeek, sub.group, dayIdx).push(subId);
@@ -6053,6 +6059,7 @@ function startRecurringEdit(recurringId = null) {
   document.getElementById('recurring-text').value = item?.text || '';
   document.getElementById('recurring-project-select').value = item?.subId || state.subs[0]?.id || '';
   document.getElementById('recurring-day-select').value = String(item?.dayIdx ?? 0);
+  fillTaskFocusFields('recurring', item || {}, item?.subId || state.subs[0]?.id || '');
   document.getElementById('recurring-delete-btn').style.display = item ? 'inline-flex' : 'inline-flex';
   document.getElementById('recurring-delete-btn').style.visibility = item ? 'visible' : 'hidden';
   document.getElementById('recurring-save-btn').textContent = item ? 'Сохранить' : 'Создать';
@@ -6070,9 +6077,10 @@ function saveRecurring() {
     item.text = text;
     item.subId = subId;
     item.dayIdx = dayIdx;
+    Object.assign(item, readTaskFocusFields('recurring'));
   } else {
     const id = taskId();
-    state.recurring.push({ id, text, subId, dayIdx });
+    state.recurring.push({ id, text, subId, dayIdx, ...readTaskFocusFields('recurring') });
     manageRecurringId = id;
   }
   save();
@@ -6237,6 +6245,7 @@ function openManage(projectId = null, preferredGroupId = null) {
   document.getElementById('manage-delete-btn').style.display = project ? 'inline-flex' : 'none';
   document.getElementById('manage-delete-btn').textContent = 'В архив';
   document.getElementById('proj-balance-enabled').checked = project?.balanceEnabled !== false;
+  document.getElementById('proj-focus-area').innerHTML = focusAreaOptions(project?.focusArea || 'unassigned');
   renderProjectGroupOptions();
   renderColorPicker('color-picker', newProjColor, 'pickColor');
   document.getElementById('manage-modal').classList.add('open');
@@ -6308,6 +6317,7 @@ async function saveProject() {
   const name = document.getElementById('proj-name').value.trim();
   newProjGroup = document.getElementById('proj-group-select').value;
   const balanceEnabled = document.getElementById('proj-balance-enabled').checked;
+  const focusArea = document.getElementById('proj-focus-area').value;
   if (!name) return;
 
   try {
@@ -6319,6 +6329,7 @@ async function saveProject() {
           name,
           color: newProjColor,
           balanceEnabled,
+          focusArea,
         }),
       });
     } else {
@@ -6329,6 +6340,7 @@ async function saveProject() {
           name,
           color: newProjColor,
           balanceEnabled,
+          focusArea,
         }),
       });
     }
@@ -6869,7 +6881,9 @@ function bindStaticUI() {
   document.getElementById('create-task-day-select').addEventListener('change', renderCreateTaskOptions);
   document.getElementById('create-task-project-select').addEventListener('change', event => {
     if (_createTaskMeta) _createTaskMeta.subId = event.target.value;
+    refreshTaskFocusInheritance('create-task', event.target.value);
   });
+  document.getElementById('recurring-project-select').addEventListener('change', event => refreshTaskFocusInheritance('recurring', event.target.value));
   document.getElementById('day-project-group-select').addEventListener('change', renderDayProjectOptions);
   document.getElementById('day-project-day-select').addEventListener('change', renderDayProjectOptions);
   document.getElementById('day-project-select').addEventListener('change', event => {

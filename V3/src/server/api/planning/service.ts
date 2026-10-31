@@ -3,6 +3,7 @@ import type { Prisma } from '@prisma/client';
 import { requireWorkspaceMutationAccess } from '../../auth/workspace-access.js';
 import { prisma } from '../../db/client.js';
 import type { PlanningStateInput } from './schema.js';
+import { resolveCompletionDate } from './focus.js';
 
 function parseWeekKeyToDate(weekKey: string) {
   const match = /^w(\d{4})(\d{2})(\d{2})$/.exec(weekKey);
@@ -133,6 +134,24 @@ async function replacePlanningState(
   });
   const activeProjectIds = activeProjects.map(project => project.id);
 
+  const [previousWeekly, previousBacklog, previousRecurring, previousStatuses] = await Promise.all([
+    tx.weeklyTask.findMany({ where: { workspaceId, projectId: { in: activeProjectIds } }, select: { id: true, focusArea: true, important: true, isDone: true, completedAt: true } }),
+    tx.backlogTask.findMany({ where: { workspaceId, projectId: { in: activeProjectIds } }, select: { id: true, focusArea: true, important: true, isDone: true, completedAt: true } }),
+    tx.recurringTask.findMany({ where: { workspaceId, projectId: { in: activeProjectIds } }, select: { id: true, focusArea: true, important: true } }),
+    tx.recurringTaskStatus.findMany({ where: { workspaceId, recurringTask: { projectId: { in: activeProjectIds } } }, select: { recurringTaskId: true, weekStartDate: true, isDone: true, completedAt: true } }),
+  ]);
+  const previousTasks = new Map([...previousWeekly, ...previousBacklog].map(task => [task.id, task]));
+  const recurringMetadata = new Map(previousRecurring.map(task => [task.id, task]));
+  const statusMetadata = new Map(previousStatuses.map(status => [`${status.recurringTaskId}:${status.weekStartDate.toISOString()}`, status]));
+  const taskMetadata = (task: PlanningStateInput['backlog'][string][number]) => {
+    const previous = previousTasks.get(task.id);
+    return {
+      focusArea: task.focusArea === undefined ? previous?.focusArea ?? null : task.focusArea,
+      important: task.important ?? previous?.important ?? false,
+      completedAt: resolveCompletionDate(task, previous),
+    };
+  };
+
   await tx.recurringTaskStatus.deleteMany({
     where: {
       workspaceId,
@@ -154,6 +173,7 @@ async function replacePlanningState(
       title: task.text,
       note: normalizeText(task.note),
       isDone: Boolean(task.done),
+      ...taskMetadata(task),
       sortOrder: index,
       archivedAt: null,
     })),
@@ -181,6 +201,7 @@ async function replacePlanningState(
           title: task.text,
           note: normalizeText(task.note),
           isDone: Boolean(task.done),
+          ...taskMetadata(task),
           sortOrder: index,
           sourceBacklogTaskId: null,
         })),
@@ -204,6 +225,8 @@ async function replacePlanningState(
     projectId: task.subId,
     dayIndex: task.dayIdx,
     title: task.text,
+    focusArea: task.focusArea === undefined ? recurringMetadata.get(task.id)?.focusArea ?? null : task.focusArea,
+    important: task.important ?? recurringMetadata.get(task.id)?.important ?? false,
     sortOrder: index,
     archivedAt: null,
   }));
@@ -224,6 +247,7 @@ async function replacePlanningState(
       recurringTaskId,
       weekStartDate: parseWeekKeyToDate(wk),
       isDone: Boolean(status.done),
+      completedAt: resolveCompletionDate(status, statusMetadata.get(`${recurringTaskId}:${parseWeekKeyToDate(wk).toISOString()}`)),
       note: normalizeText(status.note),
     })),
   );
