@@ -2,17 +2,12 @@
 .focus-launcher[hidden], .focus-backdrop[hidden], .focus-journal[hidden] { display: none !important; }
 .focus-launcher {
   position: fixed; right: 26px; bottom: 24px; z-index: 90;
-  display: inline-flex; align-items: center; justify-content: center; gap: 9px;
-  min-height: 50px; padding: 0 17px; border: 1px solid #202820; border-radius: 26px;
-  background: #202820; color: #fff; box-shadow: 0 4px 16px rgba(20, 30, 20, .18);
-  font: 600 13px/1 var(--font-sans); text-transform: none; letter-spacing: normal;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 52px; height: 52px; min-height: 52px; padding: 0; border: 1px solid var(--accent); border-radius: 50%;
+  background: var(--accent); color: #202820; box-shadow: 0 4px 16px rgba(20, 30, 20, .14);
   transition: transform 160ms ease, background 160ms ease;
 }
-.focus-launcher:hover { background: #354035; border-color: #354035; transform: translateY(-2px); }
-.focus-launcher-count {
-  display: grid; place-items: center; min-width: 24px; height: 24px; padding: 0 5px;
-  border-radius: 50%; background: var(--accent); color: #202820; font: 600 10px/1 var(--font-mono);
-}
+.focus-launcher:hover { background: var(--accent); border-color: #202820; transform: translateY(-2px); }
 .focus-backdrop { position: fixed; inset: 0; z-index: 145; background: rgba(12, 18, 12, .2); }
 .focus-journal {
   position: fixed; top: 0; right: 0; bottom: 0; z-index: 150; width: min(580px, 100vw);
@@ -117,7 +112,7 @@
 .balance-project-row { padding: 9px 0; }
 .focus-journal :focus-visible, .focus-launcher:focus-visible { outline: 2px solid #718c4b; outline-offset: 3px; }
 @media (max-width: 768px) {
-  .focus-launcher { right: 16px; bottom: calc(78px + env(safe-area-inset-bottom)); min-height: 46px; padding: 0 13px; }
+  .focus-launcher { right: 16px; bottom: calc(78px + env(safe-area-inset-bottom)); }
   .focus-journal { border-left: 0; }
   .focus-journal-header { padding: max(22px, env(safe-area-inset-top)) 18px 17px; }
   .focus-journal-header h2 { font-size: 21px; }

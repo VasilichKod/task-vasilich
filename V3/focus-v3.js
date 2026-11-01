@@ -144,8 +144,6 @@ function refreshFocusJournal() {
     if (focusJournalOpen) closeFocusJournal();
     return;
   }
-  const rows = getFocusRows();
-  document.getElementById('focus-launcher-count').textContent = String(rows.filter(row => !row.done).length);
   if (focusJournalOpen) renderFocusJournal();
 }
 
