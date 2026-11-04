@@ -1,0 +1,10 @@
+[Unit]
+Description=Wait for NePlan DNS and activate HTTPS automatically
+
+[Timer]
+OnBootSec=30s
+OnUnitInactiveSec=5min
+Unit=task-vasilich-https.service
+
+[Install]
+WantedBy=timers.target

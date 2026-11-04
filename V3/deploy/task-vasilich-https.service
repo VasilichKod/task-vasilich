@@ -1,0 +1,11 @@
+[Unit]
+Description=Activate NePlan HTTPS when public DNS points to FirstByte
+After=network-online.target nginx.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+ExecStart=/usr/bin/python3 /var/www/task-vasilich/V3/deploy/enable-https-when-ready.py
+TimeoutStartSec=180
+UMask=0077

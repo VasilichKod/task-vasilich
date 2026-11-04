@@ -27,12 +27,20 @@ def sql(query, database='postgres', capture=False):
 
 if os.geteuid() != 0:
     sys.exit('Run as root on the new VPS only.')
-if APP.exists():
+resume = '--resume-empty' in sys.argv
+if APP.exists() and not resume:
     sys.exit('Refusing to overwrite an existing application directory.')
-if sql("SELECT 1 FROM pg_database WHERE datname='task_vasilich_v3';", capture=True):
+database_exists = bool(sql("SELECT 1 FROM pg_database WHERE datname='task_vasilich_v3';", capture=True))
+role_exists = bool(sql("SELECT 1 FROM pg_roles WHERE rolname='task_vasilich';", capture=True))
+if database_exists and not resume:
     sys.exit('Refusing to overwrite an existing database.')
-if sql("SELECT 1 FROM pg_roles WHERE rolname='task_vasilich';", capture=True):
+if role_exists and not resume:
     sys.exit('Database role already exists; inspect it before retrying.')
+if resume:
+    if not database_exists or not role_exists or not (APP / '.git').is_dir() or (APP / 'V3/.env').exists():
+        sys.exit('Resume is allowed only before the first environment was created.')
+    if sql("SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public';", DATABASE, capture=True) != '0':
+        sys.exit('Refusing to resume into a database containing objects.')
 
 try:
     deploy = pwd.getpwnam('deploy')
@@ -41,13 +49,15 @@ except KeyError:
     deploy = pwd.getpwnam('deploy')
 
 APP.parent.mkdir(parents=True, exist_ok=True)
-run(['git', 'clone', '--branch', 'main', str(STAGING / 'source.bundle'), str(APP)])
+if not resume:
+    run(['git', 'clone', '--branch', 'main', str(STAGING / 'source.bundle'), str(APP)])
 run(['git', '-C', str(APP), 'remote', 'set-url', 'origin', 'https://github.com/VasilichKod/task-vasilich.git'])
 password = secrets.token_hex(32)
-sql(f"CREATE ROLE {ROLE} LOGIN PASSWORD '{password}';")
-run(['runuser', '-u', 'postgres', '--', 'createdb', '--owner', ROLE, DATABASE])
-# Only the just-created empty schema is removed; existing databases were rejected.
-sql('DROP SCHEMA public;', DATABASE)
+sql(f"{'ALTER' if resume else 'CREATE'} ROLE {ROLE} LOGIN PASSWORD '{password}';")
+if not resume:
+    run(['runuser', '-u', 'postgres', '--', 'createdb', '--owner', ROLE, DATABASE])
+# pg_restore --no-owner expects PostgreSQL's existing default public schema.
+sql(f'CREATE SCHEMA IF NOT EXISTS public AUTHORIZATION {ROLE}; ALTER SCHEMA public OWNER TO {ROLE};', DATABASE)
 with (STAGING / 'july-21.dump').open('rb') as dump:
     run(['runuser', '-u', 'postgres', '--', 'pg_restore', '--no-owner', '--no-acl', '--exit-on-error', '--role', ROLE, '--dbname', DATABASE], stdin=dump)
 
