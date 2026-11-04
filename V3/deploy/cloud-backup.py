@@ -30,6 +30,13 @@ def now():
     return datetime.now(timezone.utc).isoformat()
 
 
+def require_fresh_stamp(stamp):
+    created = datetime.strptime(stamp[:15], '%Y%m%dT%H%M%S').replace(tzinfo=timezone.utc)
+    age = (datetime.now(timezone.utc) - created).total_seconds()
+    if age < -600 or age > 8 * 3600:
+        raise RuntimeError('Database snapshot is stale or has a future timestamp')
+
+
 def digest(path):
     value = hashlib.sha256()
     with Path(path).open('rb') as source:
@@ -242,6 +249,10 @@ def main():
             raise RuntimeError('No recent verified cloud backup')
         if previous.get('status') != 'success':
             raise RuntimeError('Last cloud backup attempt failed')
+        bundle = previous.get('bundle', '')
+        if not BUNDLE_RE.fullmatch(bundle):
+            raise RuntimeError('Missing snapshot name')
+        require_fresh_stamp(bundle.removeprefix('nedplan-backup-').removesuffix('.tar.gz'))
         print('Cloud backup verified:', previous['bundle'], stamp)
         return
     with Path('/run/lock/nedplan-cloud-backup.lock').open('w') as lock:
@@ -257,6 +268,8 @@ def main():
             dumps = sorted(p for p in BACKUPS.iterdir() if DUMP_RE.fullmatch(p.name) and p.is_file())
             if not dumps:
                 raise RuntimeError('No database backup available')
+            # Hourly retries must not make an old database snapshot look fresh.
+            require_fresh_stamp(DUMP_RE.fullmatch(dumps[-1].name)[1])
             bundle = build_bundle(dumps[-1])
             with tempfile.TemporaryDirectory(prefix='cloud-readback-') as temp:
                 result['retention'] = upload(bundle, Path(temp))

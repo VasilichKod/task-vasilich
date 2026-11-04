@@ -11,6 +11,7 @@ import subprocess
 import tarfile
 import tempfile
 import unittest
+from datetime import datetime, timezone
 from unittest.mock import patch
 
 SPEC = importlib.util.spec_from_file_location('cloud_backup', Path(__file__).with_name('cloud-backup.py'))
@@ -148,6 +149,12 @@ class CloudTests(unittest.TestCase):
                 with self.assertRaises(RuntimeError):
                     wizard.recovery_kit()
             self.assertEqual(before, kit.read_bytes())
+
+    def test_stale_snapshot_is_not_made_fresh_by_reupload(self):
+        backup.require_fresh_stamp(datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S') + '000000000Z')
+        for stamp in ('20200101T000000000000000Z', '20990101T000000000000000Z'):
+            with self.assertRaises(RuntimeError):
+                backup.require_fresh_stamp(stamp)
 
 
 if __name__ == '__main__':
