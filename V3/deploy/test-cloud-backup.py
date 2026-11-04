@@ -156,6 +156,35 @@ class CloudTests(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 backup.require_fresh_stamp(stamp)
 
+    def test_whole_trash_cleanup_requires_pinned_account(self):
+        bundle = self.bundle(1)
+        self.raw_upload(bundle)
+        backup.CONFIG_DIR.mkdir()
+        cfg = configparser.ConfigParser()
+        cfg.read(backup.CONFIG)
+        cfg['nedplan_mailru'] = {'type': 'mailru', 'user': 'different@example.invalid'}
+        with backup.CONFIG.open('w') as target:
+            cfg.write(target)
+        (backup.CONFIG_DIR / 'retention.json').write_text(json.dumps(
+            {'keep': 3, 'empty_trash': True, 'account': 'dedicated@example.invalid'}))
+        original = backup.rclone
+        with patch.object(backup, 'rclone', wraps=original) as calls:
+            with self.assertRaises(RuntimeError):
+                backup.prune(bundle.name, self.work)
+            self.assertFalse(any(call.args[0] == 'cleanup' for call in calls.call_args_list))
+        cfg['nedplan_mailru']['user'] = 'dedicated@example.invalid'
+        with backup.CONFIG.open('w') as target:
+            cfg.write(target)
+        cleaned = []
+        def safe_rclone(*args):
+            if args[0] == 'cleanup':
+                cleaned.append(args)
+                return b''
+            return original(*args)
+        with patch.object(backup, 'rclone', side_effect=safe_rclone):
+            backup.prune(bundle.name, self.work)
+        self.assertEqual(cleaned, [('cleanup', 'nedplan_mailru:')])
+
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)
