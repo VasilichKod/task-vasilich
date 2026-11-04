@@ -2,6 +2,12 @@
 
 ## Current production state
 
+Recovery update, 2026-11-05: NePlan is being moved to the FirstByte VPS
+`45.144.65.6`, with its DNS delegated to `ns1.reg.ru` and `ns2.reg.ru`.
+The direct HTTPS configuration and DNS-wait activation service retain TLS 1.2.
+The Beget address below is historical; its fresh database remains inaccessible.
+See `DEPLOY-VPS.md` for the recovery snapshot and off-server backups.
+
 On 2026-07-21 Russian ISP traffic to the origin IPv4 `109.172.37.55`
 started failing during HTTPS access while HTTP and VPN-routed traffic kept
 working. The hosting provider confirmed a TSPU filtering incident and
