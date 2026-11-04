@@ -1,0 +1,16 @@
+[Unit]
+Description=Encrypted verified NePlan backup to Mail.ru (keep 3)
+After=network-online.target
+Wants=network-online.target
+ConditionPathExists=/etc/task-vasilich-backup/rclone.conf
+ConditionPathExists=/etc/task-vasilich-backup/recovery.conf.enc
+
+[Service]
+Type=oneshot
+User=root
+ExecStart=/usr/bin/python3 /usr/local/lib/nedplan-backup/cloud-backup.py
+TimeoutStartSec=45min
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+Nice=10

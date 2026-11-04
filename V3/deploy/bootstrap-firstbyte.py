@@ -76,9 +76,10 @@ for command in (['npm', 'ci', '--include=dev', '--no-audit', '--no-fund'],
     run(['runuser', '-u', 'deploy', '--', *command], cwd=APP / 'V3')
 
 deploy_dir = APP / 'V3/deploy'
-for name in ('task-vasilich-v3.service', 'task-vasilich-backup.service', 'task-vasilich-backup.timer'):
+for name in ('task-vasilich-v3.service',):
     shutil.copyfile(deploy_dir / name, pathlib.Path('/etc/systemd/system') / name)
     (pathlib.Path('/etc/systemd/system') / name).chmod(0o644)
+run(['bash', str(deploy_dir / 'install-backup-units.sh')])
 pathlib.Path('/var/lib/letsencrypt').mkdir(parents=True, exist_ok=True)
 nginx_target = pathlib.Path('/etc/nginx/sites-available/nedplan')
 shutil.copyfile(deploy_dir / 'nginx.nedplan-direct-http.conf', nginx_target)

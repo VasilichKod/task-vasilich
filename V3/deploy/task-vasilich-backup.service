@@ -2,11 +2,12 @@
 Description=Verified PostgreSQL backup for NePlan
 After=postgresql.service
 Requires=postgresql.service
+OnSuccess=task-vasilich-cloud-backup.service
 
 [Service]
 Type=oneshot
 User=root
-ExecStart=/bin/bash /var/www/task-vasilich/V3/deploy/backup-database.sh
+ExecStart=/bin/bash /usr/local/lib/nedplan-backup/backup-database.sh
 UMask=0077
 NoNewPrivileges=true
 PrivateTmp=true
