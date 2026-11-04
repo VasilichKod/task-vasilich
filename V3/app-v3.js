@@ -4506,7 +4506,7 @@ function renderSettingsView() {
         <section class="settings-card">
           <div class="settings-card-title">Данные</div>
           <div class="settings-copy">
-            JSON сохраняет график, задачи и настройки. Полная копия базы с проектными заметками создаётся на сервере и скачивается на компьютер.
+            JSON сохраняет график, задачи и настройки. Полная копия базы с проектными заметками создаётся отдельно на сервере.
           </div>
           <div class="settings-actions-row">
             <button type="button" onclick="exportAllData()">Экспорт JSON</button>
