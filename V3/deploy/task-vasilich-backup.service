@@ -1,0 +1,12 @@
+[Unit]
+Description=Verified PostgreSQL backup for NePlan
+After=postgresql.service
+Requires=postgresql.service
+
+[Service]
+Type=oneshot
+User=root
+ExecStart=/bin/bash /var/www/task-vasilich/V3/deploy/backup-database.sh
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true

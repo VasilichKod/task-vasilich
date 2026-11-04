@@ -313,6 +313,17 @@ function loadWorkspaceCacheForCurrentUser() {
       return false;
     }
 
+    // Keep the browser's pre-migration planning before a restored, older server
+    // can replace it during bootstrap. Never upload or overwrite it automatically.
+    const recoveryKey = `${storageKey}:before-firstbyte-2026-11-05`;
+    try {
+      if (!localStorage.getItem(recoveryKey)) {
+        localStorage.setItem(recoveryKey, JSON.stringify({ savedAt: new Date().toISOString(), snapshot: raw }));
+      }
+    } catch (error) {
+      console.warn('BROWSER_RECOVERY_COPY_FAILED', error);
+    }
+
     applyLocalWorkspaceSnapshot(raw);
     _hasPersistedLocalWorkspace = true;
     return true;
@@ -4495,10 +4506,11 @@ function renderSettingsView() {
         <section class="settings-card">
           <div class="settings-card-title">Данные</div>
           <div class="settings-copy">
-            Здесь можно сохранить полную резервную копию сервиса или загрузить её обратно.
+            JSON сохраняет график, задачи и настройки. Полная копия базы с проектными заметками создаётся на сервере и скачивается на компьютер.
           </div>
           <div class="settings-actions-row">
             <button type="button" onclick="exportAllData()">Экспорт JSON</button>
+            ${getBrowserRecoveryCopy() ? '<button type="button" onclick="exportBrowserRecoveryCopy()">Копия браузера до переезда</button>' : ''}
             <button type="button" onclick="triggerImportData()">Импорт копии</button>
             <button class="settings-asana-button" type="button" onclick="openAsanaImport()">Asana → НеПлан</button>
           </div>
@@ -4735,6 +4747,30 @@ function exportAllData() {
   const stamp = new Date().toISOString().slice(0, 10);
   anchor.href = url;
   anchor.download = `task-vasilich-v2-backup-${stamp}.json`;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+}
+
+function getBrowserRecoveryCopy() {
+  const storageKey = getWorkspaceStorageKey();
+  if (!storageKey) return null;
+  try {
+    return JSON.parse(localStorage.getItem(`${storageKey}:before-firstbyte-2026-11-05`) || 'null');
+  } catch {
+    return null;
+  }
+}
+
+function exportBrowserRecoveryCopy() {
+  const recovery = getBrowserRecoveryCopy();
+  if (!recovery?.snapshot) return;
+  const blob = new Blob([JSON.stringify(recovery.snapshot, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = `nedplan-browser-before-migration-${String(recovery.savedAt || '').slice(0, 10)}.json`;
   document.body.appendChild(anchor);
   anchor.click();
   anchor.remove();
